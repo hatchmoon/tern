@@ -1,0 +1,15 @@
+.tern-data
+.tern-tools
+**/.tern-build
+examples
+tools
+.tern.json
+.env
+.env.*
+backups
+.git
+node_modules
+test-results
+packages
+dist
+*.pem

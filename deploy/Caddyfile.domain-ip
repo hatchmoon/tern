@@ -1,0 +1,26 @@
+{
+	email {$ACME_EMAIL}
+	default_sni {$TERN_LEGACY_IP}
+}
+
+{$TERN_DOMAIN} {
+	request_body {
+		max_size 94371840
+	}
+	reverse_proxy {$TERN_UPSTREAM:tern:4310}
+}
+
+# Installed releases may still use the original IP as their update server.
+https://{$TERN_LEGACY_IP} {
+	tls {
+		issuer acme https://acme-v02.api.letsencrypt.org/directory {
+			profile shortlived
+		}
+	}
+	@dashboard path / /app.js /style.css /logo.svg
+	redir @dashboard https://{$TERN_DOMAIN}{uri} permanent
+	request_body {
+		max_size 94371840
+	}
+	reverse_proxy {$TERN_UPSTREAM:tern:4310}
+}

@@ -1,0 +1,16 @@
+{
+	# IP connections omit SNI. This also works behind the VPS's public-IP NAT.
+	default_sni {$TERN_DOMAIN}
+}
+
+https://{$TERN_DOMAIN} {
+	tls {
+		issuer acme https://acme-v02.api.letsencrypt.org/directory {
+			profile shortlived
+		}
+	}
+	request_body {
+		max_size 94371840
+	}
+	reverse_proxy {$TERN_UPSTREAM:tern:4310}
+}

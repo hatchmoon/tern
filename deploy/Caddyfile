@@ -1,0 +1,10 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$TERN_DOMAIN} {
+	request_body {
+		max_size 94371840
+	}
+	reverse_proxy {$TERN_UPSTREAM:tern:4310}
+}

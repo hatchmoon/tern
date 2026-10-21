@@ -1,0 +1,51 @@
+# Standalone configuration for a VPS with ports 80 and 443 available.
+# Use: docker compose --env-file .env.vps -p tern -f compose.vps.yaml up --build -d
+services:
+  tern:
+    build: .
+    environment:
+      HOST: 0.0.0.0
+      PORT: "4310"
+      NODE_ENV: production
+      TERN_DATA_DIR: /data
+      TERN_PUBLIC_URL: "https://${TERN_DOMAIN:?Set TERN_DOMAIN in .env.vps}"
+      TERN_TRUST_PROXY: "true"
+    volumes:
+      - tern-data:/data
+    expose:
+      - "4310"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2.11.7-alpine
+    depends_on:
+      tern:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      TERN_DOMAIN: "${TERN_DOMAIN:?Set TERN_DOMAIN in .env.vps}"
+      ACME_EMAIL: "${ACME_EMAIL:-}"
+      TERN_LEGACY_IP: "${TERN_LEGACY_IP:-}"
+    volumes:
+      - ${TERN_CADDYFILE:-./deploy/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  tern-data:
+  caddy-data:
+  caddy-config:

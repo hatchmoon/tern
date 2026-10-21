@@ -1,0 +1,9 @@
+[package]
+name = "tern-native-verifier"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+bipatch = "=1.0.0"
+zstd = "=0.13.3"

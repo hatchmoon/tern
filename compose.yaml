@@ -1,0 +1,12 @@
+services:
+  tern:
+    build: .
+    ports:
+      - "127.0.0.1:4310:4310"
+    environment:
+      TERN_PUBLIC_URL: "${TERN_PUBLIC_URL:-http://127.0.0.1:4310}"
+    volumes:
+      - tern-data:/data
+    restart: unless-stopped
+volumes:
+  tern-data:

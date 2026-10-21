@@ -1,0 +1,30 @@
+# Paid web service plus persistent storage. Review Render's price before creation.
+# Node's native runtime avoids installing Flutter or Android tools on the server.
+services:
+  - type: web
+    name: tern-updates
+    runtime: node
+    region: singapore
+    plan: 0.5c-512mb
+    numInstances: 1
+    autoDeployTrigger: "off"
+    buildCommand: node --version
+    startCommand: node server/main.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: TERN_DATA_DIR
+        value: /var/data/tern
+      - key: TERN_ADMIN_TOKEN
+        generateValue: true
+    disk:
+      name: tern-data
+      mountPath: /var/data
+      sizeGB: 1

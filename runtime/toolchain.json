@@ -1,0 +1,9 @@
+{
+  "provider": "shorebird-open-source",
+  "repository": "https://github.com/shorebirdtech/flutter.git",
+  "revision": "5bef02a16146a0effc07da4acccaafe90a2739ce",
+  "releaseBranch": "flutter_release/3.47.7",
+  "flutterVersion": "3.47.7",
+  "artifactBaseUrl": "https://download.shorebird.dev",
+  "upstreamCliRevision": "644763dc8af7efa306874f551640d8b65f3c0360"
+}
