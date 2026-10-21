@@ -257,3 +257,15 @@ test('SQLite and artifact records survive restart with the same admin key',async
   try {assert.equal(second.store.token,key);assert.equal(second.store.snapshot().apps[0].name,'Persistent app');assert.equal(second.store.read(sha256('persisted bytes')).toString(),'persisted bytes');}
   finally{await second.close();}
 });
+
+test('app bundle releases accept matching bundle patches and reject APK patches',async t=>{
+  const f=await fixture(t),engine='2'.repeat(40);
+  const manifest=(format,files)=>({format,flutter_revision:'1'.repeat(40),engine_revision:engine,target:'lib/main.dart',files});
+  const native={'base/dex/classes.dex':'a'.repeat(64)};
+  const release=(await f.request('/api/releases',{app_id:f.appId,version:'2.0.0+1',platform:'android',engine_version:engine,artifacts:[artifact('aarch64','bundle dart')],build_manifest:manifest('tern-android-aab-v1',native)})).data;
+  assert.equal(release.platform,'android');
+  const upload=build_manifest=>f.request('/api/patches',{release_id:release.id,engine_version:engine,artifacts:[artifact('aarch64','patched bundle dart')],build_manifest});
+  const apk=await upload(manifest('tern-android-v1',{'dex/classes.dex':'a'.repeat(64)}));
+  assert.equal(apk.status,409);assert.match(apk.data.error,/same package type/);
+  assert.equal((await upload(manifest('tern-android-aab-v1',native))).status,201);
+});

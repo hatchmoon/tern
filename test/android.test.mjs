@@ -5,7 +5,7 @@ import { mkdtempSync,readFileSync,writeFileSync,existsSync,mkdirSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readZip } from '../lib/zip.mjs';
-import { inspectApk,assertPatchCompatible } from '../lib/android.mjs';
+import { inspectApk,inspectAab,assertPatchCompatible,validateBuildManifest,manifestFormat } from '../lib/android.mjs';
 import { ensureRuntimeAsset,migrateRuntimeConfig,withRuntimeAssetBridge,readPubspecVersion } from '../lib/project.mjs';
 import { sha256 } from '../lib/patch.mjs';
 import { parseArgs } from '../cli/tern.mjs';
@@ -120,4 +120,40 @@ test('pubspec versions accept quotes and comments and explain missing build numb
 test('CLI preserves multiple defines and accepts manual native updates',()=>{
  const {options}=parseArgs(['init','--manual-updates','--dart-define','A=x','--dart-define','B=y']);
  assert.equal(options['manual-updates'],true);assert.deepEqual(options['dart-define'],['A=x','B=y']);
+});
+
+const bundle={
+ 'base/assets/flutter_assets/shorebird.yaml':files['assets/flutter_assets/shorebird.yaml'],
+ 'base/lib/arm64-v8a/libflutter.so':'ELF fixture shorebird updater arm64',
+ 'base/lib/arm64-v8a/libapp.so':'original arm64 Dart code',
+ 'base/lib/x86_64/libflutter.so':'ELF fixture shorebird updater',
+ 'base/lib/x86_64/libapp.so':'original Dart code',
+ 'base/manifest/AndroidManifest.xml':'protobuf manifest',
+ 'base/dex/classes.dex':'native code',
+ 'base/resources.pb':'resource table',
+ 'BundleConfig.pb':'bundletool config',
+ 'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libapp.so.sym':'symbols v1',
+ 'META-INF/UPLOAD.RSA':'upload signature v1',
+};
+test('app bundle inspection reads the base module and ignores metadata devices never receive',()=>{
+ const inspected=inspectAab(zip(bundle),runtime);
+ assert.equal(inspected.app_id,'native-app');assert.equal(inspected.build_manifest.format,'tern-android-aab-v1');
+ assert.deepEqual(inspected.artifacts.map(a=>a.arch),['aarch64','x86_64']);
+ assert.equal(Buffer.from(inspected.artifacts[0].data,'base64').toString(),'original arm64 Dart code');
+ assert.ok(inspected.build_manifest.files['base/dex/classes.dex']);assert.ok(inspected.build_manifest.files['BundleConfig.pb']);
+ for(const name of Object.keys(inspected.build_manifest.files))assert.doesNotMatch(name,/libapp\.so|^META-INF\/|^BUNDLE-METADATA\//);
+ assert.doesNotThrow(()=>validateBuildManifest(inspected.build_manifest));assert.equal(manifestFormat(inspected.build_manifest),'aab');
+ assert.throws(()=>inspectAab(zip(files),runtime),/app bundle is missing the generated updater asset/);
+ assert.throws(()=>inspectAab(zip({...bundle,'base/lib/x86_64/libflutter.so':'stock engine'}),runtime),/update runtime/);
+});
+test('app bundle patches accept Dart and symbol changes but reject native changes and other package types',()=>{
+ const original=inspectAab(zip(bundle),runtime).build_manifest;
+ const patch=inspectAab(zip({...bundle,'base/lib/arm64-v8a/libapp.so':'patched arm64 Dart','BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libapp.so.sym':'symbols v2','META-INF/UPLOAD.RSA':'upload signature v2'}),runtime).build_manifest;
+ assert.doesNotThrow(()=>assertPatchCompatible(original,patch));
+ for(const name of ['base/dex/classes.dex','base/manifest/AndroidManifest.xml','base/resources.pb','base/lib/arm64-v8a/libflutter.so']) {
+  const changed=inspectAab(zip({...bundle,[name]:bundle[name]+' changed'}),runtime).build_manifest;
+  assert.throws(()=>assertPatchCompatible(original,changed),/new store release/);
+ }
+ assert.throws(()=>assertPatchCompatible(original,inspectApk(zip(files),runtime).build_manifest),/same package type as its release \(app bundle\)/);
+ assert.equal(manifestFormat(null),'apk');
 });

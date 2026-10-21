@@ -33,7 +33,7 @@ The demo creates `Harbor · simulated demo`, uploads JSON fixture binaries, gene
 ## What works
 
 - Pinned updater-enabled Flutter toolchain setup, isolated from your existing SDK.
-- Android project builds, original APK preservation, and resumable release uploads.
+- Android APK and app bundle (AAB) builds, original package preservation, and resumable release uploads.
 - Compatibility checks that reject native-code, asset, engine, and entry-point changes in a patch.
 - Native emulator verification of downloaded Dart execution and rollback without APK reinstall.
 - Admin authentication, session login/logout, origin checks, and login throttling.
@@ -67,7 +67,7 @@ tern release
 
 Setup downloads the pinned open-source runtime into `.tern-tools/`. Your own Android project also needs Android's INTERNET permission. Initialization writes `.tern.json` and `tern.yaml`, and adds the YAML file to the Flutter assets. Use `--update-url https://updates.example.com` when initializing for remote devices. A physical device cannot reach the server through its own loopback address.
 
-The release command returns the archived original APK's path. Install that APK on the device. Edit Dart code, keep the exact version/build number in `pubspec.yaml`, then build and deploy a patch:
+For Google Play, use `tern release --format aab`; patches then build as bundles automatically. See [Google Play](docs/ANDROID.md#google-play-app-bundles). The release command returns the archived original APK's path. Install that APK on the device. Edit Dart code, keep the exact version/build number in `pubspec.yaml`, then build and deploy a patch:
 
 ```powershell
 tern patch --notes "Fix checkout"

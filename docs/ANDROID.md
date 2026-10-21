@@ -36,7 +36,21 @@ Initialization writes the app ID and update URL and adds `tern.yaml` to the Flut
 
 Use a reachable HTTPS server for remote devices. For a local USB/emulator test, `adb -s DEVICE reverse tcp:4310 tcp:4310` forwards the device’s loopback port to your server. A device’s `127.0.0.1` does not otherwise refer to your computer.
 
-The release command returns the archived original APK path. Install that APK once. The build uses your existing Android signing configuration. The sample uses a debug key for local testing. This workflow emits APKs and does not automate Play Store AAB submission.
+The release command returns the archived original APK path. Install that APK once. The build uses your existing Android signing configuration. The sample uses a debug key for local testing.
+
+## Google Play (app bundles)
+
+Play requires an Android App Bundle. Build the release as one:
+
+```powershell
+tern release --format aab
+```
+
+The bundle is archived as `.tern-build/release/VERSION/app-release.aab`. Upload that exact file to Play yourself; Tern does not submit to the store. Play splits the bundle per device, but each split carries the bundle's `libapp.so` unchanged, so patches built against it apply to Play installs.
+
+`tern patch` reads the release's format and builds the same package type; a bundle release cannot be patched with an APK build or the reverse. The bundle compatibility manifest (`tern-android-aab-v1`) fingerprints the base module's native libraries, DEX, manifest, resources, and assets. Signatures under `META-INF/` and `BUNDLE-METADATA/` (debug symbols, mapping files) are excluded because devices never receive them.
+
+Bundles with deferred components or dynamic feature modules are fingerprinted but not patched: only the base module's Dart code is distributed.
 
 Keep the same version and build number in `pubspec.yaml` when changing Dart code:
 
@@ -56,7 +70,51 @@ Tern compares packaged native libraries, DEX, the Android manifest, resources, a
 
 The original APK and compatibility manifest live under the app’s `.tern-build/release/VERSION/`. If upload fails after compilation, use `release --project PATH --resume` to retry that exact original. Back up the APK if moving to another machine.
 
-The SDK pin is in `runtime/toolchain.json`. Project builds update `.dart_tool/package_config.json` and Android `local.properties` to use that SDK. Run your normal SDK's `pub get` when returning to an editor configured for that SDK. Flavors, split APKs, obfuscation, AABs, and build-name overrides are not yet exposed by the project build command.
+The SDK pin is in `runtime/toolchain.json`. Project builds update `.dart_tool/package_config.json` and Android `local.properties` to use that SDK. Run your normal SDK's `pub get` when returning to an editor configured for that SDK. Flavors, obfuscation, and build-name overrides are not yet exposed by the project build command.
+
+## Physical devices and remote servers
+
+`npm run demo:android` also verifies a USB-connected phone, a remote HTTPS server, and app bundles. Settings are environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `TERN_ANDROID_DEVICE` | Device serial from `adb devices` |
+| `TERN_ANDROID_PHYSICAL=1` | Required for any serial that is not `emulator-N` |
+| `TERN_SERVER` | Loopback URLs use `adb reverse`; any other server must be HTTPS and reachable from the phone's own network |
+| `TERN_TOKEN` | Admin key for a remote server |
+| `TERN_ANDROID_FORMAT=aab` | Build a bundle and install it as Play would, via bundletool |
+| `TERN_BUNDLETOOL` | Path to a [bundletool](https://github.com/google/bundletool/releases) `.jar`, required for `aab` |
+
+The verifier only installs, clears, and launches `dev.tern.tern_example`. The architecture comes from the device ABI (`arm64-v8a`, `armeabi-v7a`, or `x86_64`). Every server, architecture, and format gets its own copy of the sample under `.tern-tools/android-e2e/`, because the update URL and architectures are compiled into the original release. After installation it reads `libapp.so` back from the device and stops unless it is byte-identical to the registered release. Evidence goes to `test-results/android/SERIAL-FORMAT/`.
+
+### Test plan
+
+Run these in order and record each `report.json` in [VALIDATION.md](VALIDATION.md). Each run checks: original code → downloaded patch executes → rollback restores the original, with the install timestamp unchanged.
+
+1. **arm64 phone, local server over USB.** Isolates device architecture from networking.
+
+   ```powershell
+   $env:TERN_ANDROID_DEVICE = 'SERIAL'; $env:TERN_ANDROID_PHYSICAL = '1'
+   npm run demo:android
+   ```
+
+2. **arm64 phone, public server.** Disconnect from your development network if possible, so the phone reaches Tern only through the internet.
+
+   ```powershell
+   $env:TERN_SERVER = 'https://updates.example.com'; $env:TERN_TOKEN = 'ADMIN_KEY'
+   npm run demo:android
+   ```
+
+3. **arm64 phone, app bundle, public server.** Proves Play-style split APKs keep the registered `libapp.so`.
+
+   ```powershell
+   $env:TERN_ANDROID_FORMAT = 'aab'; $env:TERN_BUNDLETOOL = 'C:\tools\bundletool-all.jar'
+   npm run demo:android
+   ```
+
+4. **32-bit ARM (`armeabi-v7a`) device.** Repeat step 2 on an older or 32-bit-only phone, if one is available.
+
+The final check uses a real Play internal testing track with a release signing key, which this verifier does not automate.
 
 ## Verified scope
 

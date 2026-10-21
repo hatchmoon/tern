@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { applyPatch, sha256 } from '../lib/patch.mjs';
 import { setupRuntime, ternRoot } from '../lib/runtime.mjs';
-import { buildAndroid } from '../lib/android.mjs';
+import { buildAndroid, manifestFormat } from '../lib/android.mjs';
 import { ensureRuntimeAsset } from '../lib/project.mjs';
 
 const help = `
@@ -15,9 +15,10 @@ const help = `
 
   init       --name "My app" [--configure-runtime]
   setup      Install the pinned updater-enabled Flutter toolchain locally
-  release    [--project path/to/flutter_app] [--arch x86_64]
+  release    [--project path/to/flutter_app] [--arch x86_64] [--format aab]
   patch      [--project path/to/flutter_app] [--dart-define KEY=value]
              Builds with the pinned runtime, extracts artifacts, and uploads.
+             A patch is built as the same package type as its release.
   apps       List applications and releases
   release    --version 1.0.0+1 --platform android --engine <revision>
              --artifact aarch64=path/to/libapp.so [--artifact arm=...]
@@ -35,10 +36,11 @@ const help = `
 
   Global: --server <url> --token-file <path> --app <id> --json
   Project builds: --project <folder> --arch aarch64,arm,x86_64
+                  --format apk|aab (release only; aab for Google Play)
                   --dart-define KEY=value --target lib/main.dart
   Configuration: --configure-runtime --update-url <device-reachable-url>
                  --channel staging --manual-updates
-  Retry upload: release --project <folder> --resume (uses the saved original APK)
+  Retry upload: release --project <folder> --resume (uses the saved original package)
   Auth: --token-file, TERN_TOKEN, or .tern-data/admin-token beside Tern's installation.
   Config: .tern.json in the current directory. No credentials are saved here.
   Run release and patch from your Flutter project folder; --project is optional.
@@ -128,15 +130,18 @@ export async function run(args = process.argv.slice(2)) {
       const baseline=command==='patch' ? snapshot.releases.find(r=>r.app_id===appId&&r.platform==='android'&&(!o.version||r.version===o.version)) : null;
       if(command==='patch'&&!baseline)throw new Error('No Android release found for this application. Build a release first.');
       const archs=o.arch ? o.arch.split(',') : baseline ? baseline.artifacts.map(a=>a.arch) : ['aarch64','arm','x86_64'];
-      const built=await buildAndroid({project,archs,defines:o['dart-define'],target:o.target||baseline?.build_manifest?.target||'lib/main.dart',mode:command,resume:!!o.resume});
-      if(built.app_id!==appId)throw new Error('The APK app ID differs from .tern.json. Fix tern.yaml before uploading.');
+      const releaseFormat=baseline ? manifestFormat(baseline.build_manifest) : null;
+      if(command==='patch'&&o.format&&o.format!==releaseFormat)throw new Error(`Release ${baseline.version} was built as ${releaseFormat}; its patches must use the same format.`);
+      const format=releaseFormat||o.format||'apk';
+      const built=await buildAndroid({project,archs,defines:o['dart-define'],target:o.target||baseline?.build_manifest?.target||'lib/main.dart',mode:command,resume:!!o.resume,format});
+      if(built.app_id!==appId)throw new Error(`The ${format.toUpperCase()} app ID differs from .tern.json. Fix tern.yaml before uploading.`);
       if(command==='release') {
         const result=await request('/api/releases',{app_id:appId,version:built.version,platform:'android',engine_version:built.engine_version,artifacts:built.artifacts,build_manifest:built.build_manifest});
-        return print({...result,apk:built.apk});
+        return print({...result,[format]:built.file});
       }
       if(built.version!==baseline.version)throw new Error(`Patch version ${built.version} differs from release ${baseline.version}. Keep the original version to patch it.`);
       const result=await request('/api/patches',{release_id:baseline.id,engine_version:built.engine_version,artifacts:built.artifacts,build_manifest:built.build_manifest,notes:o.notes||undefined});
-      return print({...result,compiled_apk:built.apk,install_apk:false});
+      return print({...result,[`compiled_${format}`]:built.file,[`install_${format}`]:false});
     }
     need('version'); need('platform'); need('engine');
     if (!o.artifact.length) throw new Error('Supply --artifact arch=path for every architecture in the release.');
