@@ -34,7 +34,7 @@ The installer is not Authenticode publisher-signed. Windows may show an unknown-
 Open the existing Flutter project, with its original source and Android signing configuration:
 
 ```powershell
-cd D:\WorkProjects\Winstar_Delivery_Apps
+cd D:\Projects\my_flutter_app
 tern connect
 tern setup
 tern doctor
@@ -42,7 +42,7 @@ tern doctor
 
 `connect` uses the application ID in `tern.yaml` (or the legacy `shorebird.yaml`) and recreates the ignored `.tern.json` connection. It never creates an application or replaces an existing app ID. If no configuration exists, choose an application interactively or use `--app APP_ID`; recovery requires a matching release version in `pubspec.yaml` so its runtime can be restored safely. `tern apps` lists IDs.
 
-Setup detects legacy projects automatically. Existing Winstar APKs continue using their original toolchain; do not run `tern integrate` merely to move to another machine. Native updates need the original patch-signing key, described below. Keep the release version/build number unchanged when building patches.
+Setup detects the project’s original runtime automatically. Apps already installed on devices continue using the runtime in their original release; do not run `tern integrate` merely to move to another machine. Native updates need the original patch-signing key, described below. Keep the release version/build number unchanged when building patches.
 
 ```powershell
 tern patch --notes "Fix checkout"
