@@ -10,7 +10,7 @@ From the private GitHub repository, use the version tag and package subdirectory
 dependencies:
   tern_updater:
     git:
-      url: https://github.com/dprama/tern.git
+      url: https://github.com/hatchmoon/tern.git
       ref: tern-updater-v0.2.0
       path: packages/tern_updater
 ```
