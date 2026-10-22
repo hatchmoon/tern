@@ -121,3 +121,5 @@
     .modal-actions { flex-wrap: wrap; }
   }
 }
+
+.overview-sidebar{display:grid;gap:22px;min-width:0}
