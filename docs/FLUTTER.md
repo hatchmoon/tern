@@ -1,5 +1,7 @@
 # Flutter runtime integration
 
+This is the legacy integration reference. For new applications, use [Tern's independent Android runtime](INDEPENDENT_RUNTIME.md), built on official Flutter without Shorebird dependencies.
+
 Tern now installs and uses a pinned open-source Shorebird Flutter engine/compiler for its Android project builds. Its own server implements release/patch distribution and the native updater's HTTP interface. Android native patch execution and rollback have passed on an x86_64 emulator. Start with the [Android quickstart](ANDROID.md). Adding only a Dart HTTP client to stock Flutter still does not enable executable Dart updates.
 
 ## Android first

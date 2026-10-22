@@ -81,7 +81,7 @@ const arch=(await device('shell','getprop','ro.product.cpu.abi')).stdout.trim()=
 const url=new URL(server);
 if(!['127.0.0.1','localhost'].includes(url.hostname))throw new Error('This local emulator verifier expects a loopback Tern server.');
 const port=url.port||'80';await device('reverse',`tcp:${port}`,`tcp:${port}`);
-if(!existsSync(configPath))await command('init','--project',project,'--name','Tern Android runtime','--configure-runtime','--channel','staging','--manual-updates','--update-url',server);
+if(!existsSync(configPath))await command('init','--project',project,'--name','Tern Android runtime','--configure-runtime','--runtime','legacy','--channel','staging','--manual-updates','--update-url',server);
 const config=JSON.parse(readFileSync(configPath,'utf8'));
 let release=(await api('/api/snapshot')).releases.find(r=>r.app_id===config.app_id&&r.platform==='android'&&r.version==='1.0.0+1');
 if(!release) {

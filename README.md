@@ -2,7 +2,7 @@
 
 A self-hosted Flutter update distribution MVP inspired by Shorebird. Includes an authenticated API, persistent release and patch storage, a CLI, and a responsive release console. Runs on Node.js 24+ with **no npm dependencies or build step**.
 
-**Android code push now works end to end.** Tern installs a pinned open-source Shorebird Flutter runtime, builds your release and patch, distributes the changed Dart code, and supports rollback. A native Android emulator executed the downloaded patch and then returned to the original code without reinstalling the APK. See [Android quickstart](docs/ANDROID.md) and the [validation record](docs/VALIDATION.md). iOS runtime integration and physical-device validation remain outside the verified scope.
+**Tern now has its own Android update runtime on official Flutter.** New applications use Tern's native downloader, signed Dart updates, early library selection and rollback, without Shorebird's engine, updater package or download servers. See the [independent runtime guide](docs/INDEPENDENT_RUNTIME.md). Existing releases keep their original runtime until a new baseline APK is distributed. iOS and physical ARM-device validation remain outside this runtime's verified scope.
 
 ## Start
 
@@ -61,11 +61,11 @@ npm link
 tern setup
 
 cd C:\path\to\flutter_app
-tern init --name "My app" --configure-runtime --server https://43.106.48.165
+tern init --name "My app" --configure-runtime --server https://tern.hatchmoon.cv
 tern release
 ```
 
-Setup downloads the pinned open-source runtime into `.tern-tools/`. Your own Android project also needs Android's INTERNET permission. Initialization writes `.tern.json` and `tern.yaml`, and adds the YAML file to the Flutter assets. Use `--update-url https://updates.example.com` when initializing for remote devices. A physical device cannot reach the server through its own loopback address.
+Setup downloads the pinned official Flutter SDK into `.tern-tools/`. Initialization wires in Tern's native Android package, Internet permission, startup loader and assets. It writes `.tern.json`, `tern.yaml` and public runtime configuration. See [independent runtime setup and migration](docs/INDEPENDENT_RUNTIME.md) for requirements and existing applications. Use `--update-url https://updates.example.com` when initializing for remote devices. A physical device cannot reach the server through its own loopback address.
 
 The release command returns the archived original APK's path. Install that APK on the device. Edit Dart code, keep the exact version/build number in `pubspec.yaml`, then build and deploy a patch:
 

@@ -8,6 +8,7 @@ import { Store } from './store.mjs';
 import { getAdministrator, getAccountSetup, normalizeEmail, validatePassword, hashPassword, verifyPassword, saveAdministrator } from './accounts.mjs';
 import { makePatch, applyPatch, sha256, MAX_ARTIFACT } from '../lib/patch.mjs';
 import { validateBuildManifest, assertPatchCompatible } from '../lib/android.mjs';
+import { verifyNativePatch } from '../lib/native-runtime.mjs';
 
 const webRoot = fileURLToPath(new URL('../web/', import.meta.url));
 const platforms = ['android', 'ios', 'macos', 'windows', 'linux'];
@@ -214,8 +215,11 @@ export function createApp({ dataDir, publicUrl, secureCookies = false, trustProx
         const current = integer(b.current_patch_number ?? b.patch_number ?? 0, 'current_patch_number');
         const clientId = b.client_id ? textField(b.client_id, 'client_id', 128) : null;
         const release = store.get('SELECT * FROM releases WHERE app_id=? AND version=? AND platform=?', appId, version, platform);
+        const runtimeManifest=release&&store.get('SELECT manifest FROM release_manifests WHERE release_id=?',release.id);
+        const runtime=runtimeManifest&&JSON.parse(runtimeManifest.manifest).runtime;
         const result = { patch_available: false, patch: null, rolled_back_patch_numbers: [] };
         if (!release || !store.get('SELECT 1 FROM release_artifacts WHERE release_id=? AND arch=?', release.id, arch)) return json(response, 200, result);
+        if((runtime?.id==='tern-native-v1')!==(b.runtime==='tern-native-v1'))return json(response,200,result);
         if (clientId) {
           const clientHash = sha256(`${store.privacySalt}:${appId}:${clientId}`);
           store.run(`INSERT INTO devices(app_id,client_hash,release_id,arch,channel,current_patch,last_seen)
@@ -234,6 +238,7 @@ export function createApp({ dataDir, publicUrl, secureCookies = false, trustProx
             result.patch = { number: deployment.number, hash: deployment.target_hash,
               download_url: `${publicUrl || address}/artifacts/${deployment.blob_hash}`,
               hash_signature: deployment.hash_signature || null };
+            if(runtime?.id==='tern-native-v1')Object.assign(result.patch,{format:'tern-full-v1',engine_revision:release.engine_version,download_url:`${publicUrl||address}/artifacts/native/${deployment.id}/${arch}/${deployment.target_hash}`});
           }
         }
         return json(response, 200, result);
@@ -258,6 +263,14 @@ export function createApp({ dataDir, publicUrl, secureCookies = false, trustProx
           randomUUID(), appId, patch.id, kind, clientHash, arch, typeof event.message === 'string' ? event.message.slice(0, 500) : '', now());
         // Fleet adoption comes from checks, not duplicate or delayed install events.
         return json(response, 201, { accepted: true });
+      }
+      const nativeDownload=path.match(/^\/artifacts\/native\/([a-zA-Z0-9-]+)\/(aarch64|arm|x86_64)\/([a-f0-9]{64})$/);
+      if(nativeDownload&&['GET','HEAD'].includes(method)) {
+        const artifact=store.get(`SELECT a.*,b.hash AS base_hash,m.manifest FROM patch_artifacts a JOIN patches p ON p.id=a.patch_id JOIN release_artifacts b ON b.release_id=p.release_id AND b.arch=a.arch JOIN release_manifests m ON m.release_id=p.release_id WHERE a.patch_id=? AND a.arch=? AND a.target_hash=?`,nativeDownload[1],nativeDownload[2],nativeDownload[3]);
+        if(!artifact||JSON.parse(artifact.manifest).runtime?.id!=='tern-native-v1')fail(404,'Artifact not found.');
+        const bytes=applyPatch(store.read(artifact.base_hash),store.read(artifact.blob_hash));
+        if(sha256(bytes)!==artifact.target_hash)fail(500,'Stored patch hash differs.');
+        return sendBinary(request,response,bytes,artifact.target_hash);
       }
       const download = path.match(/^\/artifacts\/([a-f0-9]{64})$/);
       if (download && ['GET', 'HEAD'].includes(method)) {
@@ -353,6 +366,8 @@ export function createApp({ dataDir, publicUrl, secureCookies = false, trustProx
           } catch (error) { fail(400, `Invalid patch: ${error.message}`); }
           if (!target.length) fail(400, 'Patch target cannot be empty.');
           if (a.hash_signature != null && (typeof a.hash_signature !== 'string' || a.hash_signature.length > 2048 || !/^[A-Za-z0-9+/]+=*$/.test(a.hash_signature))) fail(400, 'Invalid hash_signature.');
+          const runtime=baseline&&JSON.parse(baseline.manifest).runtime;
+          if(runtime?.id==='tern-native-v1'&&!verifyNativePatch(runtime.public_key,{app_id:release.app_id,version:release.version,engine_revision:release.engine_version,arch:a.arch,hash:sha256(target)},a.hash_signature))fail(400,'Tern native patch signature rejected.');
           return { ...a, compressed, target_hash: sha256(target), target_size: target.length };
         });
         const original = store.all('SELECT arch FROM release_artifacts WHERE release_id=?', release.id);

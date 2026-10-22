@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:shorebird_code_push/shorebird_code_push.dart';
 
 enum TernUpdateChannel { stable, beta, staging }
 
@@ -29,38 +28,31 @@ abstract interface class TernUpdateDriver {
 }
 
 class TernRuntimeDriver implements TernUpdateDriver {
-  TernRuntimeDriver() : _updater = ShorebirdUpdater();
-  final ShorebirdUpdater _updater;
+  TernRuntimeDriver();
   static const _channel = MethodChannel('cv.hatchmoon.tern/updater');
 
   @override
-  bool get isAvailable => _updater.isAvailable;
-  UpdateTrack _track(TernUpdateChannel channel) => switch (channel) {
-    TernUpdateChannel.stable => UpdateTrack.stable,
-    TernUpdateChannel.beta => UpdateTrack.beta,
-    TernUpdateChannel.staging => UpdateTrack.staging,
-  };
+  bool get isAvailable => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   @override
   Future<TernPatchState> readPatches() async {
-    final current = await _updater.readCurrentPatch();
-    final next = await _updater.readNextPatch();
+    final patches = await _channel.invokeMapMethod<String, dynamic>('readPatches');
     return TernPatchState(
-      current: current?.number ?? 0,
-      next: next?.number ?? 0,
+      current: patches?['current'] as int? ?? 0,
+      next: patches?['next'] as int? ?? 0,
     );
   }
 
   @override
   Future<TernUpdateAvailability> check(TernUpdateChannel channel) async =>
-      switch (await _updater.checkForUpdate(track: _track(channel))) {
-        UpdateStatus.upToDate => TernUpdateAvailability.upToDate,
-        UpdateStatus.outdated => TernUpdateAvailability.outdated,
-        UpdateStatus.restartRequired => TernUpdateAvailability.restartRequired,
-        UpdateStatus.unavailable => TernUpdateAvailability.unavailable,
+      switch (await _channel.invokeMethod<String>('check', {'channel': channel.name})) {
+        'upToDate' => TernUpdateAvailability.upToDate,
+        'outdated' => TernUpdateAvailability.outdated,
+        'restartRequired' => TernUpdateAvailability.restartRequired,
+        _ => TernUpdateAvailability.unavailable,
       };
   @override
   Future<void> download(TernUpdateChannel channel) =>
-      _updater.update(track: _track(channel));
+      _channel.invokeMethod<void>('download', {'channel': channel.name});
   @override
   Future<bool> canRestart() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;

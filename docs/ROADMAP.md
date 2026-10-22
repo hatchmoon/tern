@@ -4,6 +4,8 @@ This roadmap closes the gaps between Tern and hosted Shorebird. Phases are order
 
 Current verified scope: Android x86_64 emulator, APK builds, single admin, single process.
 
+Runtime independence is now the priority: new apps use Tern's own native updater on pinned official Flutter. See [the independent runtime guide](INDEPENDENT_RUNTIME.md). Shorebird artifact mirroring and upstream tracking below apply only to maintaining legacy releases. Physical-device and store validation remain outstanding for the new runtime.
+
 ## Phase 1 — Production-ready Android
 
 Goal: a real Android app shipped through Google Play can receive Tern patches safely.

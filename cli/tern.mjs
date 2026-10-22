@@ -6,7 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { applyPatch, sha256 } from '../lib/patch.mjs';
 import { setupRuntime, ternRoot } from '../lib/runtime.mjs';
 import { buildAndroid } from '../lib/android.mjs';
-import { ensureRuntimeAsset } from '../lib/project.mjs';
+import { ensureRuntimeAsset,readPubspecVersion } from '../lib/project.mjs';
+import {setupOfficialRuntime,buildNativeAndroid,integrateNativeProject} from '../lib/native-runtime.mjs';
 
 const help = `
   Tern · self-hosted Flutter code push
@@ -14,7 +15,10 @@ const help = `
   tern <command> [options]
 
   init       --name "My app" [--configure-runtime]
-  setup      Install the pinned updater-enabled Flutter toolchain locally
+  integrate  Wire Tern's independent runtime into an existing Android project
+             Requires a new baseline release; does not migrate installed APKs
+  setup      Install the pinned official Flutter toolchain (no Shorebird)
+             --runtime legacy installs the old toolchain for existing releases
   release    [--project path/to/flutter_app] [--arch x86_64]
   patch      [--project path/to/flutter_app] [--dart-define KEY=value]
              Builds with the pinned runtime, extracts artifacts, and uploads.
@@ -38,13 +42,14 @@ const help = `
                   --dart-define KEY=value --target lib/main.dart
   Configuration: --configure-runtime --update-url <device-reachable-url>
                  --channel staging --manual-updates
+                 --runtime legacy retains the old runtime for existing releases
   Retry upload: release --project <folder> --resume (uses the saved original APK)
   Auth: --token-file, TERN_TOKEN, or .tern-data/admin-token beside Tern's installation.
   Config: .tern.json in the current directory. No credentials are saved here.
   Run release and patch from your Flutter project folder; --project is optional.
   Project runtime configuration: tern.yaml.
-  Release and patch binaries must come from the same updater-enabled Flutter
-  toolchain. Stock Flutter binaries cannot execute downloaded Dart patches.
+  Release and patch binaries must use the same pinned official Flutter toolchain
+  and Tern native integration. Migrating an old runtime needs a new baseline APK.
 `;
 
 export function parseArgs(args) {
@@ -68,7 +73,8 @@ export function parseArgs(args) {
 export async function run(args = process.argv.slice(2)) {
   const { command, options: o } = parseArgs([...args]);
   if (command === 'help' || o.help) return console.log(help);
-  if (command === 'setup') return console.log(JSON.stringify(await setupRuntime(),null,2));
+  if(o.runtime&&!['tern','legacy'].includes(o.runtime))throw new Error('--runtime must be tern or legacy. New applications default to tern.');
+  if (command === 'setup') return console.log(JSON.stringify(await (o.runtime==='legacy'?setupRuntime():setupOfficialRuntime()),null,2));
   const project = resolve(o.project || '.');
   const configPath = resolve(project,'.tern.json');
   const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
@@ -96,7 +102,21 @@ export async function run(args = process.argv.slice(2)) {
     return result;
   }
   const print = result => console.log(JSON.stringify(result, null, 2));
-  const runtimeConfig = id => `# Tern update configuration.\napp_id: ${id}\nbase_url: ${o['update-url'] || server}\nchannel: ${o.channel || 'stable'}\nauto_update: ${o['manual-updates'] ? 'false' : 'true'}\n`;
+  const legacyConfig=o.runtime==='legacy'||(!o.runtime&&existsSync(join(project,'tern.yaml'))&&!/^runtime:\s*tern-native-v1\s*$/m.test(readFileSync(join(project,'tern.yaml'),'utf8')));
+  const runtimeConfig = id => `# Tern update configuration.\n${legacyConfig?'':'runtime: tern-native-v1\n'}app_id: ${id}\nbase_url: ${o['update-url'] || server}\nchannel: ${o.channel || 'stable'}\nauto_update: ${o['manual-updates'] ? 'false' : 'true'}\n`;
+  if(command==='integrate') {
+    if(o.runtime==='legacy')throw new Error('Use the original 0.1.0 package and release toolchain to maintain a legacy application.');
+    const path=join(project,'tern.yaml');
+    if(!existsSync(path))throw new Error('No tern.yaml found. Initialize a new application with tern init --configure-runtime.');
+    const source=readFileSync(path,'utf8');
+    const version=readPubspecVersion(readFileSync(join(project,'pubspec.yaml'),'utf8'),join(project,'pubspec.yaml'));
+    if(!/^runtime:\s*tern-native-v1\s*$/m.test(source)&&existsSync(join(project,'.tern-build','release',version,'app-release.apk')))throw new Error('Increase the app version/build before migrating to a new runtime baseline.');
+    integrateNativeProject(project,{dryRun:true});ensureRuntimeAsset(project,{dryRun:true});
+    integrateNativeProject(project);ensureRuntimeAsset(project);
+    writeFileSync(path,/^runtime:/m.test(source)?source.replace(/^runtime:.*$/m,'runtime: tern-native-v1'):'runtime: tern-native-v1\n'+source);
+    if(!existsSync(join(project,'tern-runtime.json')))writeFileSync(join(project,'tern-runtime.json'),'{}\n',{flag:'wx'});
+    return print({runtime:'tern-native-v1',project,new_baseline_required:true,next:'Upgrade tern_updater to 0.2.0, add TernUpdateScope/banner, then run tern release for a new app version/build.'});
+  }
   if (command === 'doctor') {
     const health = await request('/health', null, false);
     const snapshot = await request('/api/snapshot');
@@ -106,11 +126,14 @@ export async function run(args = process.argv.slice(2)) {
     if (existsSync(configPath)) throw new Error('.tern.json already exists. Use --app to target another app.');
     if (o['configure-runtime'] && (existsSync(join(project,'tern.yaml'))||existsSync(join(project,'shorebird.yaml')))) throw new Error('Runtime configuration already exists. Use tern config and merge the values into tern.yaml manually.');
     if (o['configure-runtime']) ensureRuntimeAsset(project,{dryRun:true});
+    if (o['configure-runtime']&&o.runtime!=='legacy')integrateNativeProject(project,{dryRun:true});
     const app = await request('/api/apps', { name: need('name') });
     writeFileSync(configPath, JSON.stringify({ server, app_id: app.id }, null, 2) + '\n', { flag: 'wx' });
     if (o['configure-runtime']) {
+      if(o.runtime!=='legacy')integrateNativeProject(project);
       writeFileSync(join(project,'tern.yaml'), runtimeConfig(app.id), { flag: 'wx' });
       ensureRuntimeAsset(project);
+      if(o.runtime!=='legacy')writeFileSync(join(project,'tern-runtime.json'),'{}\n',{flag:'wx'});
     }
     print(app);
     if (!o.json) console.log('\nCreated .tern.json. Next: upload the compiled release with the release command.');
@@ -124,11 +147,14 @@ export async function run(args = process.argv.slice(2)) {
   if (command === 'release' || command === 'patch') {
     need('app', appId);
     if (!o.artifact.length && (o.project || existsSync(join(project,'pubspec.yaml')))) {
+      const projectVersion=readPubspecVersion(readFileSync(join(project,'pubspec.yaml'),'utf8'),join(project,'pubspec.yaml'));
       const snapshot=await request('/api/snapshot');
-      const baseline=command==='patch' ? snapshot.releases.find(r=>r.app_id===appId&&r.platform==='android'&&(!o.version||r.version===o.version)) : null;
+      const baseline=command==='patch' ? snapshot.releases.find(r=>r.app_id===appId&&r.platform==='android'&&r.version===(o.version||projectVersion)) : null;
       if(command==='patch'&&!baseline)throw new Error('No Android release found for this application. Build a release first.');
       const archs=o.arch ? o.arch.split(',') : baseline ? baseline.artifacts.map(a=>a.arch) : ['aarch64','arm','x86_64'];
-      const built=await buildAndroid({project,archs,defines:o['dart-define'],target:o.target||baseline?.build_manifest?.target||'lib/main.dart',mode:command,resume:!!o.resume});
+      const independent=existsSync(join(project,'tern.yaml'))&&/^runtime:\s*tern-native-v1\s*$/m.test(readFileSync(join(project,'tern.yaml'),'utf8'));
+      if(baseline&&independent!==(baseline.build_manifest?.runtime?.id==='tern-native-v1'))throw new Error('Changing runtimes requires a new baseline release and app version. Existing releases must use their original runtime.');
+      const built=await (independent?buildNativeAndroid:buildAndroid)({project,archs,defines:o['dart-define'],target:o.target||baseline?.build_manifest?.target||'lib/main.dart',mode:command,resume:!!o.resume});
       if(built.app_id!==appId)throw new Error('The APK app ID differs from .tern.json. Fix tern.yaml before uploading.');
       if(command==='release') {
         const result=await request('/api/releases',{app_id:appId,version:built.version,platform:'android',engine_version:built.engine_version,artifacts:built.artifacts,build_manifest:built.build_manifest});

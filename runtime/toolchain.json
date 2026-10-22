@@ -1,9 +1,10 @@
 {
-  "provider": "shorebird-open-source",
-  "repository": "https://github.com/shorebirdtech/flutter.git",
-  "revision": "5bef02a16146a0effc07da4acccaafe90a2739ce",
-  "releaseBranch": "flutter_release/3.47.7",
-  "flutterVersion": "3.47.7",
-  "artifactBaseUrl": "https://download.shorebird.dev",
-  "upstreamCliRevision": "644763dc8af7efa306874f551640d8b65f3c0360"
+  "provider": "flutter-official",
+  "runtime": "tern-native-v1",
+  "repository": "https://github.com/flutter/flutter.git",
+  "revision": "058e0af2c2b57e369d905a03ac9748b0ebf543c6",
+  "engineRevision": "0cd610717bde95fd88343c64f81c11ba4e5c0010",
+  "releaseBranch": "stable",
+  "flutterVersion": "3.44.8",
+  "artifactBaseUrl": "https://storage.googleapis.com"
 }

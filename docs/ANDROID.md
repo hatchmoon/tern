@@ -1,5 +1,7 @@
 # Android quickstart
 
+This page describes the legacy Shorebird-engine workflow retained for existing releases. New applications should follow [Tern's independent runtime guide](INDEPENDENT_RUNTIME.md), which uses official Flutter and Tern's own updater.
+
 Tern has been verified on a native Android x86_64 emulator: original APK → downloaded Dart patch → original code after rollback. The APK was installed once. Runtime patch numbers, executed Dart UI, screenshots, and the unchanged Android package installation timestamp were checked.
 
 ## Requirements
@@ -26,9 +28,9 @@ The sample permits local HTTP and uses `adb reverse` to reach the loopback serve
 ```powershell
 cd D:/HatchMoon/tern
 npm link
-tern setup
+tern setup --runtime legacy
 cd C:/path/to/app
-tern init --name "My app" --configure-runtime --server https://43.106.48.165
+tern init --name "My app" --configure-runtime --runtime legacy --server https://43.106.48.165
 tern release
 ```
 

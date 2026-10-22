@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, symlinkSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -238,12 +238,13 @@ test('CLI initialization and builds detect the current Flutter project folder',a
  const env={...process.env,TERN_TOKEN:f.app.store.token,TERN_SERVER:f.url};
  const linked=join(cwd,'linked-tern');symlinkSync(resolve('.'),linked,process.platform==='win32'?'junction':'dir');
  assert.match((await exec(process.execPath,[join(linked,'cli','tern.mjs'),'--help'],{cwd,env})).stdout,/tern <command>/);
- writeFileSync(join(cwd,'pubspec.yaml'),'name: app\nversion: "1.0.0" # missing build number\nflutter:\n  uses-material-design: true\n');
+ writeFileSync(join(cwd,'pubspec.yaml'),'name: app\nversion: "1.0.0" # missing build number\ndependencies:\n  flutter:\n    sdk: flutter\nflutter:\n  uses-material-design: true\n');
+ mkdirSync(join(cwd,'android/app/src/main'),{recursive:true});
+ writeFileSync(join(cwd,'android/app/src/main/AndroidManifest.xml'),'<manifest><application android:name="${applicationName}"></application></manifest>');
  await exec(process.execPath,[cli,'init','--name','Current folder app','--configure-runtime','--json'],{cwd,env});
  assert.ok(existsSync(join(cwd,'tern.yaml')));assert.equal(existsSync(join(cwd,'shorebird.yaml')),false);
  assert.match(readFileSync(join(cwd,'pubspec.yaml'),'utf8'),/- tern.yaml/);
  const configured=JSON.parse(readFileSync(join(cwd,'.tern.json'),'utf8'));
- await f.request('/api/releases',{app_id:configured.app_id,version:'1.0.0+1',platform:'android',engine_version:'fixture',artifacts:[artifact('aarch64','base')]});
  for(const command of ['release','patch']) {
   await assert.rejects(exec(process.execPath,[cli,command],{cwd,env}),error=>error.stderr.includes(join(cwd,'pubspec.yaml')+' needs a version with a build number'));
  }

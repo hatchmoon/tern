@@ -1,5 +1,16 @@
 # Validation record
 
+## Independent runtime — 2026-10-22
+
+- Official Flutter 3.44.8 was installed into a clean Tern cache from `flutter/flutter` and Google's artifact storage. The framework and engine revisions match `runtime/toolchain.json`. No Shorebird toolchain is selected in this path.
+- The x86_64 Android emulator executed an original APK, downloaded and ran a signed Tern Dart patch after the banner's cold restart, and returned to the original code after server revocation. APK hash and installation timestamp stayed unchanged. Process IDs: 9997 → 10277 → 10451.
+- An intentionally invalid signature was rejected on the device with current/next patch still zero. The APK contains no `shorebird.yaml`, the engine binary contains no Shorebird marker, and the app has no `shorebird_code_push` dependency.
+- A second signed patch deliberately exited before rendering its first frame. The following launch recovered to the original code and reported an install failure. The verifier waited for an explicit Dart fault marker before testing recovery, distinguishing it from the normal gap between restart processes.
+- Evidence: ignored `test-results/independent-runtime/report.json`, first-frame/fault/signature logs and screenshots. The server and applications were disposable and local. Physical ARM devices, iOS, other Flutter versions and app-store delivery have not been validated for this runtime.
+- Backend checks passed on Node 26 and Node 24; the Flutter package passed analysis and 13 controller/widget tests; the dashboard passed 34 desktop/mobile assertions. See the current automated test output for the evolving backend test count.
+
+## Earlier legacy-runtime and platform checks
+
 Validated on 2026-10-21, Windows, Node.js v26.3.0 and v24.22.0.
 
 - **Reusable Flutter SDK verified.** `packages/tern_updater` passes 13 controller/widget tests and Flutter analysis. The tests cover selected channels, committed patch readiness, offline staged patches, concurrent checks, dismissal without losing form input, rollback to the original release, restart confirmation, unsaved-work guards, missing native support, and accessible narrow-screen layout.

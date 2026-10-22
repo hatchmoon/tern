@@ -1,6 +1,6 @@
 # Tern Updater for Flutter
 
-Reusable update status, an **Update ready** banner, and an Android **Restart now** action for apps built with Tern. Version 0.1.0 is distributed as a local Flutter plugin; it has not been published to pub.dev.
+Tern's independent Android update runtime, reusable update status, an **Update ready** banner, and a confirmed **Restart now** action. Version 0.2.0 uses official Flutter and has no Shorebird package dependency. It requires a new baseline APK and is not published to pub.dev. Read the [runtime setup and migration guide](../../docs/INDEPENDENT_RUNTIME.md) before upgrading an existing app.
 
 ## Install once per application
 
@@ -11,7 +11,7 @@ dependencies:
   tern_updater:
     git:
       url: https://github.com/dprama/tern.git
-      ref: tern-updater-v0.1.0
+      ref: tern-updater-v0.2.0
       path: packages/tern_updater
 ```
 
@@ -23,9 +23,9 @@ From a Flutter application on this development machine:
 flutter pub add tern_updater --path D:/HatchMoon/tern/packages/tern_updater
 ```
 
-Use Flutter 3.32+/Dart 3.8+, Java 17, and an Android build setup compatible with AGP 8.11.1 and compile SDK 36. Tern releases and patches must continue using the pinned runtime installed by `tern setup`. A normal Flutter debug build is supported for development: update state becomes `unavailable` and no banner appears.
+Use the pinned official Flutter 3.44.8 SDK, Java 17+, Android API 26+ and a build setup compatible with AGP 8.11.1 and compile SDK 36. `tern init --configure-runtime` connects the early Android loader and assets for a new app. Merely adding the Dart package is insufficient. Tern releases and patches must continue using the same pin. Normal Flutter debug builds expose `unavailable` update state and show no update banner.
 
-Alternatively, copy this package or extract the supplied ZIP, then change the dependency path. Do not add administrator tokens or passwords to the app. The existing `tern.yaml` supplies the app ID and public update server; this package uses that runtime configuration.
+Alternatively, copy this package or extract the supplied ZIP, then change the dependency path. Do not add administrator tokens, signing private keys or passwords to the app. The CLI builds public runtime configuration from `tern.yaml` and embeds the signing public key in `tern-runtime.json`.
 
 ## Wrap your application
 
