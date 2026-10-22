@@ -1,6 +1,6 @@
 {
   "name": "tern-code-push",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Self-hosted Flutter patch distribution with a CLI and release console",
   "type": "module",
@@ -16,6 +16,7 @@
     "test:flutter-sdk": "node scripts/flutter-sdk-e2e.mjs",
     "test:independent-runtime": "node scripts/independent-runtime-e2e.mjs",
     "package:flutter-sdk": "node scripts/package-flutter-sdk.mjs",
+    "package:cli": "node scripts/package-cli.mjs",
     "cli": "node cli/tern.mjs"
   }
 }

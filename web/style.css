@@ -123,3 +123,6 @@
 }
 
 .overview-sidebar{display:grid;gap:22px;min-width:0}
+.login.cli-authorization{display:flex;justify-content:center;align-items:center;min-height:100vh}
+.cli-authorization .login-form{width:100%;max-width:500px;padding:36px 28px}
+.cli-authorization .brand{color:var(--ink,#142137);padding-left:0}

@@ -5,14 +5,28 @@ import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { applyPatch, sha256 } from '../lib/patch.mjs';
 import { setupRuntime, ternRoot } from '../lib/runtime.mjs';
-import { buildAndroid } from '../lib/android.mjs';
+import { buildAndroid,readRuntimeYaml } from '../lib/android.mjs';
 import { ensureRuntimeAsset,readPubspecVersion } from '../lib/project.mjs';
 import {setupOfficialRuntime,buildNativeAndroid,integrateNativeProject} from '../lib/native-runtime.mjs';
+import {readSettings,canonicalServer,savedToken} from '../lib/client-state.mjs';
+import {browserLogin,connectProject,logout,transferKey} from './onboarding.mjs';
+import {diagnose} from './doctor.mjs';
+
+const cliVersion=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version;
 
 const help = `
   Tern · self-hosted Flutter code push
 
   tern <command> [options]
+
+  login      Sign in through your browser [--server https://tern.hatchmoon.cv]
+             --no-browser prints a link for manual approval
+  logout     Revoke this machine's credential and sign out
+  connect    Connect this Flutter project to an existing app [--app APP_ID]
+  keys       export --output backup.pem | import --input backup.pem
+             Encrypted signing-key transfer; prompts for a passphrase
+  upgrade    Download and verify the latest Windows installer [--check]
+             --rollback switches back to the previous installed CLI
 
   init       --name "My app" [--configure-runtime]
   integrate  Wire Tern's independent runtime into an existing Android project
@@ -35,7 +49,8 @@ const help = `
              Downloads, reconstructs, verifies, and reports install telemetry.
              This validates distribution; it does not execute Flutter code.
   config     Print the runtime YAML for the configured app
-  doctor     Check API connectivity and authentication
+  doctor     Check connection, sign-in, Java, Android SDK and runtime
+             --server-only checks connectivity; --build fails if a check fails
 
   Global: --server <url> --token-file <path> --app <id> --json
   Project builds: --project <folder> --arch aarch64,arm,x86_64
@@ -56,7 +71,7 @@ export function parseArgs(args) {
   const options = { artifact: [], 'dart-define': [] };
   let command = 'help';
   if (args[0] && !args[0].startsWith('--')) command = args.shift();
-  const flags = new Set(['json', 'configure-runtime', 'manual-updates', 'resume', 'help']);
+  const flags = new Set(['json', 'configure-runtime', 'manual-updates', 'resume', 'help','no-browser','server-only','build','check','rollback']);
   for (let i = 0; i < args.length; i++) {
     if (!args[i].startsWith('--')) throw new Error(`Unexpected argument: ${args[i]}`);
     const key = args[i].slice(2);
@@ -71,37 +86,57 @@ export function parseArgs(args) {
 }
 
 export async function run(args = process.argv.slice(2)) {
+  if(args.length===1&&['--version','version'].includes(args[0]))return console.log(cliVersion);
+  let keyAction;if(args[0]==='keys'){args=[...args];keyAction=args.splice(1,1)[0];}
   const { command, options: o } = parseArgs([...args]);
   if (command === 'help' || o.help) return console.log(help);
   if(o.runtime&&!['tern','legacy'].includes(o.runtime))throw new Error('--runtime must be tern or legacy. New applications default to tern.');
-  if (command === 'setup') return console.log(JSON.stringify(await (o.runtime==='legacy'?setupRuntime():setupOfficialRuntime()),null,2));
   const project = resolve(o.project || '.');
+  const yamlPath=join(project,'tern.yaml'),oldYamlPath=join(project,'shorebird.yaml');
+  const yaml=existsSync(yamlPath)?readRuntimeYaml(readFileSync(yamlPath,'utf8')):existsSync(oldYamlPath)?readRuntimeYaml(readFileSync(oldYamlPath,'utf8')):{};
+  if(command==='setup')return console.log(JSON.stringify(await (o.runtime==='legacy'||(!o.runtime&&yaml.app_id&&yaml.runtime!=='tern-native-v1')?setupRuntime():setupOfficialRuntime()),null,2));
   const configPath = resolve(project,'.tern.json');
   const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
-  const server = (o.server || process.env.TERN_SERVER || config.server || 'http://127.0.0.1:4310').replace(/\/$/, '');
+  const server = canonicalServer(o.server || process.env.TERN_SERVER || config.server || yaml.base_url || readSettings().server || 'https://tern.hatchmoon.cv');
   const parsedServer = new URL(server);
   if (!['http:', 'https:'].includes(parsedServer.protocol) || parsedServer.username || parsedServer.password) throw new Error('Server must be an HTTP(S) URL without embedded credentials.');
   const defaultToken = existsSync(resolve('.tern-data/admin-token')) ? resolve('.tern-data/admin-token') : join(ternRoot,'.tern-data','admin-token');
   const tokenPath = resolve(o['token-file'] || defaultToken);
-  const token = process.env.TERN_TOKEN || (existsSync(tokenPath) ? readFileSync(tokenPath, 'utf8').trim() : '');
+  if(command==='login')return browserLogin(server,{noBrowser:o['no-browser'],machine:o.machine});
+  if(command==='keys'&&keyAction==='export')return console.log(JSON.stringify(await transferKey(keyAction,o,o.app||config.app_id||yaml.app_id,project),null,2));
+  if(command==='upgrade'&&o.rollback){const {rollbackInstallation}=await import('./upgrade.mjs');return console.log(JSON.stringify(rollbackInstallation(),null,2));}
+  if(o['token-file']&&!existsSync(tokenPath))throw new Error('Token file not found: '+tokenPath);
+  const token = process.env.TERN_TOKEN || (o['token-file']&&existsSync(tokenPath)?readFileSync(tokenPath,'utf8').trim():'') || savedToken(server) || (existsSync(tokenPath)?readFileSync(tokenPath,'utf8').trim():'');
   const appId = o.app || config.app_id;
   const need = (name, value = o[name]) => {
     if (value == null || value === '') throw new Error(`Supply --${name}.`);
     return value;
   };
-  async function request(path, payload, auth = true) {
-    if (auth && !token) throw new Error('Set TERN_TOKEN or supply --token-file. The server writes its local key to .tern-data/admin-token.');
+  async function request(path, payload, auth = true, method) {
+    if (auth && !token) throw new Error('Run tern login, set TERN_TOKEN, or supply --token-file.');
     const response = await fetch(`${server}${path}`, {
-      method: payload ? 'POST' : 'GET',
+      method: method || (payload ? 'POST' : 'GET'),
       headers: { ...(auth ? { Authorization: `Bearer ${token}` } : {}), ...(payload ? { 'Content-Type': 'application/json' } : {}) },
       body: payload ? JSON.stringify(payload) : undefined,
       signal: AbortSignal.timeout(120_000), redirect: 'error',
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Server returned ${response.status}.`);
+    if (!response.ok){const error=new Error(result.error || `Server returned ${response.status}.`);error.status=response.status;throw error;}
     return result;
   }
   const print = result => console.log(JSON.stringify(result, null, 2));
+  if(command==='connect')return print(await connectProject({project,server,appId:o.app,request}));
+  if(command==='logout')return print(await logout(server,request));
+  if(command==='keys'){
+    let expectedKey;
+    if(keyAction==='import'){
+      const snapshot=await request('/api/snapshot');
+      const version=existsSync(join(project,'pubspec.yaml'))?readPubspecVersion(readFileSync(join(project,'pubspec.yaml'),'utf8'),join(project,'pubspec.yaml')):null;
+      const release=snapshot.releases.find(r=>r.app_id===(appId||yaml.app_id)&&r.version===version&&r.platform==='android');expectedKey=release?.build_manifest?.runtime?.public_key;
+    }
+    return print(await transferKey(keyAction,o,appId||yaml.app_id,project,expectedKey));
+  }
+  if(command==='upgrade'){const {upgrade}=await import('./upgrade.mjs');return print(await upgrade({server,token,check:o.check}));}
   const legacyConfig=o.runtime==='legacy'||(!o.runtime&&existsSync(join(project,'tern.yaml'))&&!/^runtime:\s*tern-native-v1\s*$/m.test(readFileSync(join(project,'tern.yaml'),'utf8')));
   const runtimeConfig = id => `# Tern update configuration.\n${legacyConfig?'':'runtime: tern-native-v1\n'}app_id: ${id}\nbase_url: ${o['update-url'] || server}\nchannel: ${o.channel || 'stable'}\nauto_update: ${o['manual-updates'] ? 'false' : 'true'}\n`;
   if(command==='integrate') {
@@ -118,9 +153,8 @@ export async function run(args = process.argv.slice(2)) {
     return print({runtime:'tern-native-v1',project,new_baseline_required:true,next:'Upgrade tern_updater to 0.2.0, add TernUpdateScope/banner, then run tern release for a new app version/build.'});
   }
   if (command === 'doctor') {
-    const health = await request('/health', null, false);
-    const snapshot = await request('/api/snapshot');
-    return print({ server, node: process.version, status: health.status, authenticated: true, applications: snapshot.apps.length });
+    const result=await diagnose({server,project,yaml,request,serverOnly:o['server-only']});print(result);
+    if(!result.authenticated||(o.build&&!result.ready))process.exitCode=1;return;
   }
   if (command === 'init') {
     if (existsSync(configPath)) throw new Error('.tern.json already exists. Use --app to target another app.');

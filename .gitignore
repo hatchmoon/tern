@@ -13,6 +13,7 @@ test-results/
 tools/native-verifier/target/
 *.vmcode
 *.pem
+!runtime/cli-release-public.pem
 dist/
 **/.dart_tool/
 **/.flutter-plugins-dependencies

@@ -1,5 +1,7 @@
 # Tern
 
+**Windows installer:** sign in at [tern.hatchmoon.cv](https://tern.hatchmoon.cv), open **Getting started**, and download Tern. The installer bundles Node.js; then run `tern login`, `tern connect`, `tern setup`, and `tern doctor` from your Flutter project. See [installation, key transfer, and upgrades](docs/INSTALLATION.md).
+
 A self-hosted Flutter update distribution MVP inspired by Shorebird. Includes an authenticated API, persistent release and patch storage, a CLI, and a responsive release console. Runs on Node.js 24+ with **no npm dependencies or build step**.
 
 **Tern now has its own Android update runtime on official Flutter.** New applications use Tern's native downloader, signed Dart updates, early library selection and rollback, without Shorebird's engine, updater package or download servers. See the [independent runtime guide](docs/INDEPENDENT_RUNTIME.md). Existing releases keep their original runtime until a new baseline APK is distributed. iOS and physical ARM-device validation remain outside this runtime's verified scope.

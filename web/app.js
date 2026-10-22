@@ -9,6 +9,8 @@ function readSetupToken() {
   return token;
 }
 let pendingSetupToken = readSetupToken();
+const readCliRequest=()=>location.hash.match(/^#cli=([a-f0-9]{64})$/)?.[1]||null;
+let pendingCliRequest=readCliRequest();
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const paths = {
   grid:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -154,8 +156,8 @@ function docs() {
   const code = lines => '<pre>' + esc(lines.join('\n')) + '</pre>';
   const server = location.origin;
   return `<div class="docs"><div class="notice">${icon('check')}<p><strong>Android code push is verified.</strong> Tern’s native emulator test executed a downloaded Dart patch and rolled back without reinstalling the APK. New apps use Tern’s own Android updater with pinned official Flutter. Signed patches and startup recovery are verified on an x86_64 emulator; physical ARM devices and iOS remain unverified.</p></div>
-  <section class="panel panel-body"><h2>1. Install the Tern command once</h2><p>From the Tern installation folder, link the CLI and install its pinned Flutter toolchain. Node.js 24 or later, an Android SDK, and a compatible JDK are required.</p>${code(['npm link','tern setup'])}<p>Open a terminal inside your Flutter application for the remaining commands. The CLI uses the admin key beside this Tern installation. For another server, supply --token-file or set TERN_TOKEN.</p></section>
-  <section class="panel panel-body"><h2>2. Connect your Flutter application</h2>${code(['tern init --name "My app" --configure-runtime --server ' + server])}<p>Initialization connects Tern’s Android startup loader, package and runtime assets. Add TernUpdateScope and the update banner to your app. Use Android API 26 or later and an explicit version such as 1.0.0+1. To migrate an existing app, increase its version/build, upgrade tern_updater to 0.2.0, run tern integrate, and distribute a new baseline APK.</p></section>
+  <section class="panel panel-body"><h2>1. Install Tern</h2><p>The Windows x64 installer includes Node.js and adds tern to your user PATH. Reopen your terminal after installation. Git, Java 17+, and Android SDK tools are still needed to build apps.</p><p><a class="button primary" href="/api/cli/downloads/windows-x64">${icon('download')} Download Tern for Windows</a></p><p>The installer is not Windows publisher-signed; Windows may show an unknown-publisher warning. Its release manifest is cryptographically signed and verified by tern upgrade.</p>${code(['tern login --server ' + server])}<p>Approve the machine in your browser after checking that its verification code matches your terminal. Manage and revoke machine access below.</p><p>${button('Manage connected machines','machines','','device')}</p></section>
+  <section class="panel panel-body"><h2>2. Connect your Flutter application</h2><p>Open a terminal in an existing Flutter project:</p>${code(['tern connect','tern setup','tern doctor'])}<p>Setup detects the app’s original runtime, including legacy Winstar releases. Restore the original Android signing configuration and, for Tern native apps, import the encrypted patch-signing key before building patches. For a new app:</p>${code(['tern init --name "My app" --configure-runtime --server ' + server,'tern setup'])}<p>Initialization connects Tern’s Android startup loader, package and runtime assets. Add TernUpdateScope and the update banner to your app. Use Android API 26 or later and an explicit version such as 1.0.0+1. To migrate an existing app, increase its version/build, upgrade tern_updater to 0.2.0, run tern integrate, and distribute a new baseline APK.</p></section>
   <section class="panel panel-body"><h2>3. Build the original release</h2>${code(['tern release'])}<p>Tern builds an updater-enabled APK, uploads its compiled Dart libraries, and records native and bundled-asset fingerprints. Install the archived original APK shown in the output. Keep it: every patch uses this original build. Back up the application signing key under .tern-data/signing securely; it is required on other build machines and never belongs in the app. If an upload fails, retry with tern release --resume.</p></section>
   <section class="panel panel-body"><h2>4. Build and deploy a fix</h2>${code(['tern patch --notes "Fix checkout"','tern deploy --patch PATCH_ID --channel staging --rollout 100'])}<p>Edit Dart code while keeping the original version and build number. Tern rejects native, asset, and runtime changes that require a new store release. Let the original installed app download the patch, then restart it to run the fix. Promote the tested patch to beta or stable in the dashboard.</p></section>
   <section class="panel panel-body"><h2>Rollback and application deletion</h2>${code(['tern rollback --patch PATCH_ID'])}<p>Rollback permanently revokes a patch on every channel. Devices learn about it on their next check and return to valid code on restart. To remove an application, open Applications, click its delete button, and type its exact name. Deletion permanently removes its releases, patches, deployments, and metrics, and stops future updates for that application.</p></section>
@@ -265,10 +267,35 @@ function rollbackPatch(id) {
     '<div class="upload-note">This permanently revokes the patch on every channel. Devices learn about the rollback on their next check and stop using this patch on restart. Create a new patch to ship the fix again.</div>',
     'Revoke patch',async () => { await api(`/api/patches/${id}/rollback`,{});toast(`Patch ${p.number} revoked on every channel.`); },true);
 }
+async function cliApproval(){
+  const request=await api('/api/cli/approval?id='+encodeURIComponent(pendingCliRequest));
+  root.innerHTML=`<main class="login cli-authorization"><section class="login-form"><div class="brand"><img src="/logo.svg" alt="">tern</div><h1>Connect this machine?</h1><p><strong>${esc(request.machine)}</strong> is requesting CLI access to this workspace. It will be able to manage applications, releases, patches, and deployments for up to 90 days.</p><p>Only approve a request you started yourself. Enter the verification code shown in your terminal.</p><form id="cli-approval"><div class="field"><label for="cli-code">Terminal verification code</label><input id="cli-code" name="code" autocomplete="off" maxlength="8" minlength="8" required placeholder="8-character code"></div><button class="button primary" type="submit" ${request.status!=='pending'?'disabled':''}>Approve machine</button> <button class="button" id="cli-decline" type="button">Decline</button><p class="form-error" role="alert"></p></form></section></main>`;
+  const form=root.querySelector('#cli-approval');
+  async function decide(approve){
+    try{
+      await api('/api/cli/approval',{id:pendingCliRequest,code:approve?form.elements.code.value.trim().toUpperCase():request.code,approve});
+      pendingCliRequest=null;history.replaceState(null,'','#docs');state.view='docs';
+      root.innerHTML='<main class="login"><section class="login-form"><h1>'+ (approve?'Machine approved':'Request declined')+'</h1><p>'+(approve?'Return to your terminal to finish signing in.':'This machine was not granted access.')+'</p><a href="/">Open dashboard</a></section></main>';
+    }catch(error){form.querySelector('.form-error').textContent=error.message;}
+  }
+  form.addEventListener('submit',event=>{event.preventDefault();decide(true);});
+  root.querySelector('#cli-decline').addEventListener('click',()=>decide(false));
+}
+async function connectedMachines(){
+  try{
+    const {credentials}=await api('/api/cli/credentials');
+    const list=credentials.filter(c=>!c.revoked&&c.expires_at>Date.now());
+    showModal('Connected machines','CLI access expires after 90 days. Changing your account password also invalidates machine credentials.',list.length?list.map(c=>`<div class="panel panel-body"><strong>${esc(c.machine)}</strong><p>Expires ${esc(new Date(c.expires_at).toLocaleDateString())} · Last used ${c.last_used?esc(relative(c.last_used)):'never'}</p><button class="button danger" type="button" data-revoke-machine="${esc(c.id)}">Revoke access</button></div>`).join(''):'<p>No machines connected.</p>','Done',async()=>{});
+  }catch(error){toast(error.message);}
+}
 async function refresh(force=false) {
   if (pendingSetupToken) { if(modal.open)modal.close(); await login(); return; }
   try {
     const data = await api('/api/snapshot');
+    if(pendingCliRequest){
+      try{await cliApproval();}catch(error){if(error.status===401)throw error;root.innerHTML='<main class="login"><section class="login-form"><h1>Unable to connect</h1><p>'+esc(error.message)+'</p><p>Run tern login again to start a new request.</p><a href="/">Open dashboard</a></section></main>';}
+      return;
+    }
     const compare = d => d && JSON.stringify({...d,server_time:undefined});
     const changed = compare(state.data) !== compare(data);
     state.data=data; state.online=true;
@@ -293,6 +320,10 @@ document.addEventListener('click',async event => {
   const action=target.dataset.action;
   if(action==='new-app')newApp();
   if(action==='account')accountSettings();
+  if(action==='machines')connectedMachines();
+  if(target.dataset.revokeMachine){
+    try{await api('/api/cli/credentials/'+encodeURIComponent(target.dataset.revokeMachine),null,'DELETE');modal.close();toast('Machine access revoked.');await connectedMachines();}catch(error){toast(error.message);}return;
+  }
   if(action==='new-release')newRelease();
   if(action==='new-patch')newPatch();
   if(action==='guide')navigate('docs');
@@ -318,6 +349,7 @@ document.addEventListener('input',event=>{
 document.addEventListener('change',event=>{if(event.target.id==='app-filter'){state.app=event.target.value;shell();}});
 const initialView=location.hash.slice(1);if(views[initialView])state.view=initialView;
 window.addEventListener('hashchange',async()=>{
+  const cli=readCliRequest();if(cli){pendingCliRequest=cli;await refresh();return;}
   const token=readSetupToken();
   if(token){pendingSetupToken=token;await refresh();}
 });

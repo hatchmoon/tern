@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync,existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { isIP } from 'node:net';
@@ -9,6 +9,8 @@ import { getAdministrator, getAccountSetup, normalizeEmail, validatePassword, ha
 import { makePatch, applyPatch, sha256, MAX_ARTIFACT } from '../lib/patch.mjs';
 import { validateBuildManifest, assertPatchCompatible } from '../lib/android.mjs';
 import { verifyNativePatch } from '../lib/native-runtime.mjs';
+import {initializeCliAuth,cliCredential,startAuthorization,authorization,decideAuthorization,redeemAuthorization} from './cli-auth.mjs';
+import {verifyRelease} from '../cli/upgrade.mjs';
 
 const webRoot = fileURLToPath(new URL('../web/', import.meta.url));
 const platforms = ['android', 'ios', 'macos', 'windows', 'linux'];
@@ -58,6 +60,7 @@ function equal(a, b) { return timingSafeEqual(Buffer.from(sha256(a)), Buffer.fro
 
 export function createApp({ dataDir, publicUrl, secureCookies = false, trustProxy = false } = {}) {
   const store = new Store(dataDir);
+  initializeCliAuth(store);
   const sessions = new Map();
   const attempts = new Map();
   const rates = new Map();
@@ -86,6 +89,7 @@ export function createApp({ dataDir, publicUrl, secureCookies = false, trustProx
   function authenticated(request) {
     const bearer = request.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
     if (bearer && equal(bearer, store.token)) return true;
+    if (bearer && cliCredential(store,bearer)) return true;
     const id = request.headers.cookie?.match(/(?:^|;\s*)tern_session=([a-f0-9]{64})(?:;|$)/)?.[1];
     const session = sessions.get(id);
     if (session && session.expiresAt > Date.now() && session.version === (getAdministrator(store)?.password_hash || null)) return true;
@@ -140,6 +144,25 @@ export function createApp({ dataDir, publicUrl, secureCookies = false, trustProx
       const path = url.pathname;
       const method = request.method;
       checkOrigin(request);
+      if(path==='/api/cli/authorize'&&method==='POST'){
+        rateLimit(request,'cli-start',10);
+        try{return json(response,201,startAuthorization(store,await body(request)));}catch(error){fail(400,error.message);}
+      }
+      if(path==='/api/cli/token'&&method==='POST'){
+        rateLimit(request,'cli-poll',90);const b=await body(request);
+        try{return json(response,200,redeemAuthorization(store,b.id,b.verifier));}catch(error){fail(401,error.message);}
+      }
+      if(path==='/api/cli/approval'&&['GET','POST'].includes(method)){
+        // Only an interactive browser session may approve a machine.
+        if(request.headers.authorization)fail(403,'Approve this request in your browser.');
+        requireAdmin(request);
+        const b=method==='POST'?await body(request):{id:url.searchParams.get('id')};
+        const item=authorization(store,b.id);if(!item)fail(404,'This sign-in request expired. Run tern login again.');
+        if(method==='GET')return json(response,200,{id:item.id,machine:item.machine,code:item.code,status:item.status,expires_at:item.expires_at});
+        if(typeof b.approve!=='boolean')fail(400,'Choose approve or decline.');
+        try{decideAuthorization(store,b.id,b.approve,b.code);}catch(error){fail(409,error.message);}
+        return json(response,200,{approved:b.approve});
+      }
       if (method === 'GET' && path === '/health') return json(response, 200, { status: 'ok', version: '0.1.0' });
       if (method === 'GET' && path === '/api/auth/status') return json(response, 200, { password_sign_in: !!getAdministrator(store) });
       if (method === 'GET' && ['/','/app.js','/style.css','/logo.svg'].includes(path)) {
@@ -279,6 +302,23 @@ export function createApp({ dataDir, publicUrl, secureCookies = false, trustProx
       }
       if (!path.startsWith('/api/')) fail(404, 'Not found.');
       requireAdmin(request);
+      if(['/api/cli/downloads/manifest','/api/cli/downloads/windows-x64'].includes(path)&&['GET','HEAD'].includes(method)){
+        const directory=join(store.directory,'cli-distributions'),manifest=join(directory,'tern-cli-latest.json');
+        if(!existsSync(manifest))fail(404,'The Windows installer has not been published on this server.');
+        const envelope=JSON.parse(readFileSync(manifest,'utf8')),release=verifyRelease(envelope);
+        if(path.endsWith('/manifest'))return json(response,200,envelope);
+        const file=join(directory,release.filename);if(!existsSync(file))fail(404,'Installer file is missing.');
+        const bytes=readFileSync(file);if(bytes.length!==release.size||sha256(bytes)!==release.sha256)fail(503,'Installer integrity verification failed.');
+        response.setHeader('Content-Disposition','attachment; filename="'+release.filename+'"');
+        return sendBinary(request,response,bytes,release.sha256,true);
+      }
+      if(path==='/api/cli/credentials'&&method==='GET')return json(response,200,{credentials:store.all('SELECT id,machine,created_at,expires_at,last_used,revoked FROM cli_credentials WHERE account_version=? ORDER BY created_at DESC',sha256(getAdministrator(store)?.password_hash||''))});
+      const revokeCredential=path.match(/^\/api\/cli\/credentials\/([a-zA-Z0-9-]+)$/);
+      if(revokeCredential&&method==='DELETE'){
+        const id=revokeCredential[1]==='current'?cliCredential(store,request.headers.authorization?.slice(7))?.id:revokeCredential[1];
+        if(!id)fail(400,'No CLI credential was supplied.');
+        store.run('UPDATE cli_credentials SET revoked=1 WHERE id=?',id);return json(response,200,{revoked:true});
+      }
       if (path === '/api/snapshot' && method === 'GET') return json(response, 200, { ...store.snapshot(), administrator: { email: getAdministrator(store)?.email || null } });
       if (path === '/api/account/password' && method === 'POST') {
         rateLimit(request,'change-password',6);
