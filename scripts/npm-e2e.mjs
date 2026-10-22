@@ -1,0 +1,52 @@
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,copyFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {spawnSync,spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import assert from 'node:assert/strict';
+import {createApp} from '../server/app.mjs';
+import {verifyRelease} from '../cli/upgrade.mjs';
+
+if(!process.env.npm_execpath)throw new Error('Run with npm run test:npm.');
+const release=verifyRelease(JSON.parse(readFileSync('dist/tern-npm-latest.json')));
+assert.equal(release.platform,'npm');
+const tarball=resolve('dist',release.filename),bytes=readFileSync(tarball);
+assert.equal(bytes.length,release.size);assert.equal(createHash('sha256').update(bytes).digest('hex'),release.sha256);
+const root=mkdtempSync(join(tmpdir(),'tern-npm-e2e-')),prefix=join(root,'global prefix with spaces'),home=join(root,'user settings'),project=join(root,'Flutter project');
+mkdirSync(prefix);mkdirSync(home);mkdirSync(project);
+const env={...process.env,TERN_HOME:home};delete env.TERN_TOKEN;delete env.TERN_SERVER;delete env.TERN_CACHE_DIR;
+process.env.TERN_HOME=home;
+function run(command,args,options={}){const result=spawnSync(command,args,{encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024,env,...options});if(result.status!==0)throw new Error(command+' failed: '+(result.error?.message||result.stderr||result.stdout));return result.stdout;}
+const npm=(...args)=>run(process.execPath,[process.env.npm_execpath,...args,'--prefix',prefix,'--offline','--ignore-scripts']);
+npm('install','-g',tarball);
+const packageRoot=join(prefix,'node_modules','@hatchmoon','tern');
+const cli=process.platform==='win32'?join(prefix,'tern.cmd'):join(prefix,'bin','tern');
+assert.ok(existsSync(cli));
+const shimVersion=process.platform==='win32'?run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from("& '"+cli.replaceAll("'","''")+"' --version",'utf16le').toString('base64')],{cwd:project}):run(cli,['--version'],{cwd:project});
+assert.equal(shimVersion.trim(),release.version);
+const tern=(args,options={})=>new Promise((resolve,reject)=>{const child=spawn(process.execPath,[join(packageRoot,'cli','tern.mjs'),...args],{env,windowsHide:true,...options});let stdout='',stderr='';child.stdout.on('data',data=>stdout+=data);child.stderr.on('data',data=>stderr+=data);child.on('error',reject);child.on('close',code=>code===0?resolve(stdout):reject(new Error('tern failed: '+stderr)));});
+const state=await import(pathToFileURL(join(packageRoot,'lib','client-state.mjs')));
+assert.equal(state.toolDirectory(),join(home,'cache'));
+assert.equal(state.signingKeyPath('existing-app'),join(home,'keys','existing-app.private.pem'));
+const data=join(root,'server-data'),app=createApp({dataDir:data});
+try{
+  const server=await app.listen(0),distribution=join(data,'cli-distributions');mkdirSync(distribution);
+  copyFileSync(tarball,join(distribution,release.filename));copyFileSync('dist/tern-npm-latest.json',join(distribution,'tern-npm-latest.json'));
+  assert.equal((await fetch(server+'/api/cli/downloads/npm')).status,401);
+  const downloaded=await fetch(server+'/api/cli/downloads/npm',{headers:{Authorization:'Bearer '+app.store.token}});assert.equal(downloaded.status,200);
+  assert.equal(createHash('sha256').update(Buffer.from(await downloaded.arrayBuffer())).digest('hex'),release.sha256);
+  const created=await fetch(server+'/api/apps',{method:'POST',headers:{Authorization:'Bearer '+app.store.token,'Content-Type':'application/json'},body:JSON.stringify({name:'Existing npm test app'})});assert.equal(created.status,201);const application=await created.json();
+  writeFileSync(join(project,'pubspec.yaml'),'name: npm_test\nversion: 3.0.0+1\n');
+  writeFileSync(join(project,'tern.yaml'),'app_id: '+application.id+'\nbase_url: '+server+'\nchannel: stable\n');
+  writeFileSync(join(root,'token.txt'),app.store.token);
+  const args=['--server',server,'--token-file',join(root,'token.txt')];
+  const connect=JSON.parse(await tern(['connect',...args],{cwd:project}));assert.equal(connect.app_id,application.id);
+  const doctor=JSON.parse(await tern(['doctor','--server-only',...args],{cwd:project}));assert.equal(doctor.authenticated,true);
+  const upgrade=JSON.parse(await tern(['upgrade','--check',...args],{cwd:project}));assert.equal(upgrade.available,release.version);assert.match(upgrade.install,/npm install -g/);
+  assert.equal(readFileSync(join(project,'.tern.json'),'utf8').includes(application.id),true);
+}finally{await app.close();}
+writeFileSync(join(home,'retain-me'),'settings survive package removal');
+npm('uninstall','-g','@hatchmoon/tern');assert.equal(existsSync(cli),false);assert.equal(readFileSync(join(home,'retain-me'),'utf8'),'settings survive package removal');
+const report={passed:true,version:release.version,sha256:release.sha256,isolated_global_install:true,spaces_in_prefix:true,existing_app_connection:true,server_diagnostics:true,npm_upgrade_guidance:true,user_state_retained:true};
+mkdirSync('test-results/npm',{recursive:true});writeFileSync('test-results/npm/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

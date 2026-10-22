@@ -1,6 +1,6 @@
 # Tern
 
-**Windows installer:** sign in at [tern.hatchmoon.cv](https://tern.hatchmoon.cv), open **Getting started**, and download Tern. The installer bundles Node.js; then run `tern login`, `tern connect`, `tern setup`, and `tern doctor` from your Flutter project. See [installation, key transfer, and upgrades](docs/INSTALLATION.md).
+**CLI installation:** sign in at [tern.hatchmoon.cv](https://tern.hatchmoon.cv), open **Getting started**, and download the npm package. Install it with `npm install -g ./tern-cli-0.2.0.tgz`, then run `tern login`, `tern connect`, `tern setup`, and `tern doctor` from your Flutter project. Node.js 24.22.1+ is required. The self-contained Windows installer remains available. See [installation, key transfer, and upgrades](docs/INSTALLATION.md).
 
 A self-hosted Flutter update distribution MVP inspired by Shorebird. Includes an authenticated API, persistent release and patch storage, a CLI, and a responsive release console. Runs on Node.js 24+ with **no npm dependencies or build step**.
 

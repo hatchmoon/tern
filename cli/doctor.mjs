@@ -15,7 +15,7 @@ export async function diagnose({server,project,yaml,request,serverOnly=false}){
   catch(error){check('Sign-in',false,'Run tern login --server '+server,error.message);}
   if(!serverOnly){
     const [major,minor,patch]=process.versions.node.split('.').map(Number);
-    check('Node.js security baseline',(major===24&&(minor>22||(minor===22&&patch>=1)))||(major===26&&(minor>12||(minor===12&&patch>=1)))||major>26,'Use the bundled Tern installer or a patched Node 24.22.1+ runtime.',process.version);
+    check('Node.js security baseline',(major===24&&(minor>22||(minor===22&&patch>=1)))||(major===26&&(minor>12||(minor===12&&patch>=1)))||major>26,'Install a patched Node.js 24.22.1+ runtime.',process.version);
     const git=spawnSync('git',['--version'],{encoding:'utf8',windowsHide:true});check('Git',git.status===0,'Install Git and reopen the terminal. Git is required by Flutter SDK setup.');
     const java=spawnSync(process.env.JAVA_HOME?join(process.env.JAVA_HOME,'bin',process.platform==='win32'?'java.exe':'java'):'java',['-version'],{encoding:'utf8',windowsHide:true});
     const javaVersion=(java.stderr||java.stdout||'').match(/version "(\d+)/)?.[1];check('Java',java.status===0&&Number(javaVersion)>=17,'Install JDK 17+ and configure JAVA_HOME.',javaVersion?'Java '+javaVersion:undefined);

@@ -17,6 +17,8 @@
     "test:independent-runtime": "node scripts/independent-runtime-e2e.mjs",
     "package:flutter-sdk": "node scripts/package-flutter-sdk.mjs",
     "package:cli": "node scripts/package-cli.mjs",
+    "package:npm": "node scripts/package-npm.mjs",
+    "test:npm": "node scripts/npm-e2e.mjs",
     "cli": "node cli/tern.mjs"
   }
 }

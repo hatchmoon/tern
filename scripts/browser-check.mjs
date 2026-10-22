@@ -104,6 +104,11 @@ try{
   await page.getByRole('heading',{name:'Your first app starts here',exact:true}).waitFor();assertions++;
   expect(app.store.snapshot().releases.length===0&&app.store.snapshot().patches.length===0);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.getByRole('button',{name:'Toggle navigation'}).click();await page.locator('[data-nav="docs"]').first().click();
+  await page.getByRole('heading',{name:'Getting started',exact:true}).waitFor();
+  expect(await page.getByRole('link',{name:'Download npm package'}).isVisible());
+  expect(await page.getByText('npm install -g ./tern-cli-0.2.0.tgz',{exact:false}).isVisible());
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.getByRole('button',{name:'Toggle navigation'}).click();await page.getByRole('button',{name:'Sign out',exact:true}).click();
   await page.getByRole('heading',{name:'Open your console'}).waitFor();assertions++;
   expect(errors.length===0);expect(policyErrors.length===0);

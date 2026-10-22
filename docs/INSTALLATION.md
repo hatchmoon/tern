@@ -1,5 +1,20 @@
 # Install Tern on Windows
 
+## npm installation
+
+Install a patched Node.js 24.22.1+ or 26.12.1+ release. Sign in to [the Tern dashboard](https://tern.hatchmoon.cv), open **Getting started**, and select **Download npm package**. In the folder containing the downloaded tarball, run:
+
+```powershell
+npm install -g ./tern-cli-0.2.0.tgz
+tern login --server https://tern.hatchmoon.cv
+```
+
+Reopen your terminal if `tern` is not found. This installs only the CLI; Git, Java 17+, and Android SDK/NDK tools are needed for Flutter builds. The package keeps credentials, signing keys, and downloaded SDKs under `%LOCALAPPDATA%\Tern`, so `npm install -g` can replace the CLI without removing them. To update, download the latest tarball from the dashboard and install it with the same command. `tern upgrade --check` reports the available version; it does not invoke the Windows installer for npm installations. Use `npm uninstall -g @hatchmoon/tern` to remove the CLI.
+
+The Tern GitHub repository and release assets are private. The downloaded tarball works without GitHub access or an npm registry account. Direct `npm install -g @hatchmoon/tern` requires a separately published registry package and is not available yet.
+
+## Windows installer (alternative)
+
 Tern CLI 0.2.0 has a Windows x64 installer with a bundled, pinned Node.js 24.22.1 runtime. You do not need Node.js, npm, GitHub access, or a source checkout to install and run the CLI. Git, Java 17+, and Android SDK/NDK tools are still needed for Flutter builds.
 
 1. Sign in to [the Tern dashboard](https://tern.hatchmoon.cv), open **Getting started**, and click **Download Tern for Windows**.

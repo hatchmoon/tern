@@ -25,8 +25,8 @@ const help = `
   connect    Connect this Flutter project to an existing app [--app APP_ID]
   keys       export --output backup.pem | import --input backup.pem
              Encrypted signing-key transfer; prompts for a passphrase
-  upgrade    Download and verify the latest Windows installer [--check]
-             --rollback switches back to the previous installed CLI
+  upgrade    Check the latest release [--check]; Windows installs can download it
+             --rollback switches back to the previous Windows installer version
 
   init       --name "My app" [--configure-runtime]
   integrate  Wire Tern's independent runtime into an existing Android project

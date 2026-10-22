@@ -312,6 +312,17 @@ export function createApp({ dataDir, publicUrl, secureCookies = false, trustProx
         response.setHeader('Content-Disposition','attachment; filename="'+release.filename+'"');
         return sendBinary(request,response,bytes,release.sha256,true);
       }
+      if(['/api/cli/downloads/npm/manifest','/api/cli/downloads/npm'].includes(path)&&['GET','HEAD'].includes(method)){
+        const directory=join(store.directory,'cli-distributions'),manifest=join(directory,'tern-npm-latest.json');
+        if(!existsSync(manifest))fail(404,'The npm package has not been published on this server.');
+        const envelope=JSON.parse(readFileSync(manifest,'utf8')),release=verifyRelease(envelope);
+        if(release.platform!=='npm')fail(503,'The npm release manifest is invalid.');
+        if(path.endsWith('/manifest'))return json(response,200,envelope);
+        const file=join(directory,release.filename);if(!existsSync(file))fail(404,'npm package file is missing.');
+        const bytes=readFileSync(file);if(bytes.length!==release.size||sha256(bytes)!==release.sha256)fail(503,'npm package integrity verification failed.');
+        response.setHeader('Content-Disposition','attachment; filename="'+release.filename+'"');
+        return sendBinary(request,response,bytes,release.sha256,true);
+      }
       if(path==='/api/cli/credentials'&&method==='GET')return json(response,200,{credentials:store.all('SELECT id,machine,created_at,expires_at,last_used,revoked FROM cli_credentials WHERE account_version=? ORDER BY created_at DESC',sha256(getAdministrator(store)?.password_hash||''))});
       const revokeCredential=path.match(/^\/api\/cli\/credentials\/([a-zA-Z0-9-]+)$/);
       if(revokeCredential&&method==='DELETE'){

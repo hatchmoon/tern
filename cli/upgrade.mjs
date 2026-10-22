@@ -15,15 +15,18 @@ export function rollbackInstallation(){
 
 export function verifyRelease(envelope){
   const {payload,signature}=envelope||{};
-  if(!payload||payload.format!==1||payload.platform!=='windows-x64'||!/^\d+\.\d+\.\d+$/.test(payload.version)||!/^TernSetup-\d+\.\d+\.\d+-windows-x64\.exe$/.test(payload.filename)||!/^[a-f0-9]{64}$/.test(payload.sha256)||!Number.isSafeInteger(payload.size)||payload.size<1||payload.size>150*1024*1024)throw new Error('Invalid CLI release manifest.');
+  if(!payload||payload.format!==1||!['windows-x64','npm'].includes(payload.platform)||!/^\d+\.\d+\.\d+$/.test(payload.version)||!(payload.platform==='npm'?/^tern-cli-\d+\.\d+\.\d+\.tgz$/:/^TernSetup-\d+\.\d+\.\d+-windows-x64\.exe$/).test(payload.filename)||!/^[a-f0-9]{64}$/.test(payload.sha256)||!Number.isSafeInteger(payload.size)||payload.size<1||payload.size>150*1024*1024)throw new Error('Invalid CLI release manifest.');
   if(!verify(null,Buffer.from(JSON.stringify(payload)),readFileSync(new URL('../runtime/cli-release-public.pem',import.meta.url)),Buffer.from(signature||'','base64')))throw new Error('CLI release signature rejected.');
   return payload;
 }
 export async function upgrade({server,token,check=false}){
-  const response=await fetch(server+'/api/cli/downloads/manifest',{headers:token?{Authorization:'Bearer '+token}:{},redirect:'error',signal:AbortSignal.timeout(15000)});
+  const npmPackage=existsSync(join(installationRoot,'distribution.json'));
+  const response=await fetch(server+(npmPackage?'/api/cli/downloads/npm/manifest':'/api/cli/downloads/manifest'),{headers:token?{Authorization:'Bearer '+token}:{},redirect:'error',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw new Error('Could not retrieve the CLI release. Sign in and retry.');
   const release=verifyRelease(await response.json()),current=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version;
+  if(npmPackage&&release.platform!=='npm')throw new Error('Expected an npm release manifest.');
   const newer=release.version.localeCompare(current,undefined,{numeric:true})>0;
+  if(npmPackage)return {current,available:release.version,update_available:newer,verified:true,install:'Download the npm package from Getting started, then run npm install -g <downloaded-tgz-file>'};
   if(check||!newer)return {current,available:release.version,update_available:newer,verified:true};
   if(process.platform!=='win32'||process.arch!=='x64')throw new Error('This release supports Windows x64.');
   const binary=await fetch(server+'/api/cli/downloads/windows-x64',{headers:token?{Authorization:'Bearer '+token}:{},redirect:'error',signal:AbortSignal.timeout(180000)});
