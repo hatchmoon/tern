@@ -37,7 +37,8 @@ cp .env.vps.example .env.vps
 chmod 600 .env.vps
 # Set TERN_DOMAIN to your hostname and ACME_EMAIL to your email in .env.vps.
 docker compose --env-file .env.vps -p tern -f compose.vps.yaml config --quiet
-docker compose --env-file .env.vps -p tern -f compose.vps.yaml up --build -d --wait
+docker compose --env-file .env.vps -p tern -f compose.vps.yaml build --pull tern
+docker compose --env-file .env.vps -p tern -f compose.vps.yaml up -d --wait
 ```
 
 Use a hostname only in `TERN_DOMAIN`, such as `updates.example.com`. Tern receives the corresponding HTTPS origin automatically. The same command and project name should be used for future deploys to retain volume identity.
@@ -84,10 +85,13 @@ If the existing proxy runs in another container, its loopback address is differe
 Deploy a new source version using the same directory, Compose project name, and volumes:
 
 ```sh
-docker compose --env-file .env.vps -p tern -f compose.vps.yaml up --build -d --wait
+docker compose --env-file .env.vps -p tern -f compose.vps.yaml build --pull tern
+docker compose --env-file .env.vps -p tern -f compose.vps.yaml up -d --wait
 ```
 
 Tern is a single process using local SQLite and artifact storage. Container replacement causes a short interruption. Keep one backend instance against the data volume.
+
+The Dockerfile pins the Node version and image digest. For a Node security update, update that pin to the patched release, build with `--pull`, test the resulting image, and recreate the backend. A running container keeps its original Node binary until it is replaced; restarting it or updating Node on the host does not update the container. Keep a rollback image and a consistent data backup before replacing the backend.
 
 Before a backup, pause Tern so that the database and referenced artifacts form a consistent snapshot:
 
