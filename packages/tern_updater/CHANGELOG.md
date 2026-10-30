@@ -1,3 +1,8 @@
+## 0.3.1
+
+- Detect when Flutter silently starts the APK's original Dart code instead of a selected patch. The patch is then marked bad, the app reports its real patch as the original release, a `__patch_install_failure__` event with Android's load error is sent, and `TernRuntime` logs the reason. Previously the patch was reported as installed.
+- Requires a new baseline APK.
+
 ## 0.3.0
 
 - Add `available` and `downloading` update phases, with download progress (`receivedBytes`, `totalBytes`, `downloadProgress`) and the found or downloading patch number.

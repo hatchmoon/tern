@@ -94,12 +94,42 @@ public final class TernNativeRuntime {
 
     /** Dart calls this only after the first frame has rendered. */
     public synchronized void markHealthy() {
+        String fallback = running > 0 ? fallbackReason(running) : null;
+        if (fallback != null) {
+            // Flutter silently uses the APK's libapp.so when it cannot use the patch, so the
+            // first frame alone does not prove the patch is running.
+            int patch = running, good = state.getInt("good", 0);
+            if (good == patch) good = 0;
+            Log.e("TernRuntime", "Flutter did not run patch " + patch + " and started the original code instead: " + fallback);
+            commit(state.edit().putBoolean("bad-" + patch, true).putInt("next", good).putInt("good", good).putInt("booting", 0));
+            running = 0;
+            event("__patch_install_failure__", patch, "Flutter ran the original code instead of the patch: " + fallback);
+        }
         if (running > 0 && state.getInt("booting", 0) == running) {
             commit(state.edit().putInt("booting", 0).putInt("good", running));
             event("__patch_install__", running, "Tern native runtime rendered its first frame");
         }
         int failed=state.getInt("failed",0);
         if(failed>0) { event("__patch_install_failure__",failed,"Patch did not confirm its first frame; reverted on next launch"); commit(state.edit().putInt("failed",0)); }
+    }
+
+    /** Null when the patch library is mapped into this process; otherwise why Flutter fell back. */
+    private String fallbackReason(int number) {
+        File library = library(number);
+        String name = "/" + library.getParentFile().getName() + "/" + library.getName();
+        try (BufferedReader maps = new BufferedReader(new FileReader("/proc/self/maps"))) {
+            for (String line; (line = maps.readLine()) != null;) if (line.contains(name)) return null;
+        } catch (IOException error) {
+            Log.w("TernRuntime", "Cannot confirm which Dart library is running", error);
+            return null;
+        }
+        // Flutter unloaded the patch. Loading it here only reveals Android's reason.
+        try {
+            System.load(library.getAbsolutePath());
+            return "Android can load " + library.getName() + ", but Flutter did not use its Dart snapshot";
+        } catch (UnsatisfiedLinkError error) {
+            return String.valueOf(error.getMessage());
+        }
     }
 
     public synchronized void automaticUpdate() {
