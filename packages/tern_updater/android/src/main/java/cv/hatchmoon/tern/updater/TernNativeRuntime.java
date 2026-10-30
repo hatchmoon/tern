@@ -26,8 +26,14 @@ public final class TernNativeRuntime {
     private final SharedPreferences state;
     private final JSONObject config;
     private final File directory;
-    private int running;
+    private volatile int running;
     private JSONObject offered;
+    /** Download status published to Dart without waiting for the runtime lock. */
+    public interface StatusListener { void onStatus(int available, int downloading, long received, long total); }
+    private static volatile StatusListener listener;
+    private volatile int availableNumber, downloadingNumber;
+    private volatile long receivedBytes, totalBytes = -1;
+    private long statusSentAt;
 
     public static synchronized TernNativeRuntime get(Context context) {
         if (instance == null) instance = new TernNativeRuntime(context.getApplicationContext());
@@ -51,8 +57,12 @@ public final class TernNativeRuntime {
     }
 
     public boolean available() { return config != null && config.optString("runtime").equals("tern-native-v1") && Build.VERSION.SDK_INT >= 26 && (context.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0; }
-    public synchronized int current() { return running; }
-    public synchronized int next() { return state.getInt("next", 0); }
+    public int current() { return running; }
+    public int next() { return state.getInt("next", 0); }
+    public static synchronized void setStatusListener(StatusListener value) { listener = value; }
+    public static synchronized void clearStatusListener(StatusListener value) { if (listener == value) listener = null; }
+    /** Offered-but-not-staged patch, the patch being downloaded, and its byte counts; total is -1 when unknown. */
+    public long[] status() { return new long[] { availableNumber, downloadingNumber, receivedBytes, totalBytes }; }
 
     /** Called once by the loader, before the Dart VM exists. Never fetches over the network. */
     public synchronized String selectForLaunch() {
@@ -114,6 +124,7 @@ public final class TernNativeRuntime {
         }
         commit(update);
         offered = null;
+        availableNumber = 0;
         if (response.optBoolean("patch_available")) {
             JSONObject patch = response.getJSONObject("patch");
             int number = patch.getInt("number");
@@ -121,9 +132,12 @@ public final class TernNativeRuntime {
                 if (!patch.getString("format").equals("tern-full-v1") || !patch.getString("engine_revision").equals(config.getString("engine_revision"))) throw new IOException("Incompatible Tern runtime response");
                 verifySignature(patch);
                 offered = patch;
+                availableNumber = number;
+                publishStatus(true);
                 return "outdated";
             }
         }
+        publishStatus(true);
         return current() != next() ? "restartRequired" : "upToDate";
     }
 
@@ -134,15 +148,22 @@ public final class TernNativeRuntime {
         int number = patch.getInt("number");
         File destination = library(number), partial = new File(directory, "download.part");
         if (partial.exists() && !partial.delete()) throw new IOException("Cannot clear interrupted download");
-        HttpURLConnection connection = open(new URL(patch.getString("download_url")));
+        downloadingNumber = number; receivedBytes = 0; totalBytes = -1;
+        publishStatus(true);
+        HttpURLConnection connection = null;
         try {
+            connection = open(new URL(patch.getString("download_url")));
             if (connection.getResponseCode() != 200) throw new IOException("Patch download returned " + connection.getResponseCode());
             if (connection.getContentLengthLong() > MAX_BYTES) throw new IOException("Patch exceeds 64 MiB");
+            totalBytes = connection.getContentLengthLong();
+            publishStatus(true);
             try (InputStream in = connection.getInputStream(); FileOutputStream out = new FileOutputStream(partial)) {
                 byte[] bytes = new byte[65536]; long size = 0; int count;
                 while ((count = in.read(bytes)) != -1) {
                     size += count; if (size > MAX_BYTES) throw new IOException("Patch exceeds 64 MiB");
                     out.write(bytes, 0, count);
+                    receivedBytes = size;
+                    publishStatus(false);
                 }
                 out.getFD().sync();
             }
@@ -153,11 +174,25 @@ public final class TernNativeRuntime {
             if (!partial.renameTo(destination)) throw new IOException("Cannot atomically publish patch");
             commit(state.edit().putString("descriptor-" + number, patch.toString()).putInt("next", number));
             offered = null;
+            availableNumber = 0; downloadingNumber = 0;
+            publishStatus(true);
             event("__patch_download__", number, "Signed Tern AOT library staged");
         } finally {
-            connection.disconnect();
+            if (connection != null) connection.disconnect();
             if (partial.exists()) partial.delete();
+            downloadingNumber = 0; receivedBytes = 0; totalBytes = -1;
+            publishStatus(true);
         }
+    }
+
+    /** Progress is throttled to about four updates per second; state changes are always sent. */
+    private void publishStatus(boolean force) {
+        StatusListener target = listener;
+        if (target == null) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (!force && now - statusSentAt < 250) return;
+        statusSentAt = now;
+        target.onStatus(availableNumber, downloadingNumber, receivedBytes, totalBytes);
     }
 
     private File library(int number) { return new File(directory, "patch-" + number + ".so"); }

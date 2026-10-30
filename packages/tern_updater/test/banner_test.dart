@@ -106,4 +106,49 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Restart now'), findsOneWidget);
   });
+  testWidgets('progress banner offers download and shows progress', (
+    tester,
+  ) async {
+    final driver =
+        FakeStatusDriver()
+          ..result = TernUpdateAvailability.outdated
+          ..status = const TernDownloadStatus(availablePatch: 1);
+    final controller = TernUpdateController(
+      driver: driver,
+      autoDownload: false,
+    );
+    addTearDown(controller.dispose);
+    await controller.checkForUpdates();
+    await tester.pumpWidget(app(controller));
+    expect(find.text('Update available'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TernUpdateBanner(controller: controller, showProgress: true),
+        ),
+      ),
+    );
+    expect(find.text('Update available'), findsOneWidget);
+    driver.publish(
+      const TernDownloadStatus(
+        availablePatch: 1,
+        downloadingPatch: 1,
+        receivedBytes: 300,
+        totalBytes: 400,
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Downloading update'), findsOneWidget);
+    expect(find.text('75% downloaded'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    driver.publish(const TernDownloadStatus(availablePatch: 1));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Download'));
+    await tester.pump();
+    await tester.pump();
+    expect(driver.downloads, 1);
+    expect(find.text('Update ready'), findsOneWidget);
+  });
 }
+
