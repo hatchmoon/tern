@@ -34,7 +34,7 @@ public final class TernUpdaterPlugin implements FlutterPlugin, MethodChannel.Met
         context = binding.getApplicationContext();
         channel = new MethodChannel(binding.getBinaryMessenger(), "cv.hatchmoon.tern/updater");
         channel.setMethodCallHandler(this);
-        renderer=binding.getFlutterEngine().getRenderer();
+        renderer=renderer(binding);
         firstFrame=new FlutterUiDisplayListener() {
             private boolean confirmed;
             @Override public void onFlutterUiDisplayed() {
@@ -49,6 +49,13 @@ public final class TernUpdaterPlugin implements FlutterPlugin, MethodChannel.Met
             if (channel != null) channel.invokeMethod("status", statusMap(new long[] { available, downloading, received, total }));
         });
         TernNativeRuntime.setStatusListener(status);
+    }
+    /** The engine's texture registry is its renderer; getFlutterEngine() is deprecated. */
+    @SuppressWarnings("deprecation")
+    private static FlutterRenderer renderer(FlutterPluginBinding binding) {
+        if (binding.getTextureRegistry() instanceof FlutterRenderer value) return value;
+        // Keep first-frame confirmation working; without it every patch would be reverted.
+        return binding.getFlutterEngine().getRenderer();
     }
     private static HashMap<String, Object> statusMap(long[] value) {
         HashMap<String, Object> map = new HashMap<>();
