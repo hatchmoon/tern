@@ -9,6 +9,8 @@ android {
     namespace = "cv.hatchmoon.tern.updater"
     compileSdk = 36
     defaultConfig { minSdk = 26 }
+    // Diagnostic probe for patch loading; see src/main/cpp/tern_probe.c.
+    externalNativeBuild { cmake { path = "src/main/cpp/CMakeLists.txt" } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

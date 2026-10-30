@@ -81,6 +81,7 @@ public final class TernNativeRuntime {
             JSONObject descriptor = new JSONObject(state.getString("descriptor-" + selected, "{}"));
             File library = library(selected);
             verify(library, descriptor);
+            Log.i("TernRuntime", "Patch " + selected + " probe: " + TernProbe.run(library.getAbsolutePath()));
             commit(state.edit().putInt("booting", selected));
             running = selected;
             return library.getAbsolutePath();
