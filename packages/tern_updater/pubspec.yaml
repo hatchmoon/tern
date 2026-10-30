@@ -1,6 +1,6 @@
 name: tern_updater
 description: Tern update status, a ready-to-restart banner, and an Android cold restart for Flutter apps.
-version: 0.3.1
+version: 0.3.2
 publish_to: none
 repository: https://github.com/hatchmoon/tern_updater
 environment:

@@ -81,11 +81,13 @@ public final class TernNativeRuntime {
             JSONObject descriptor = new JSONObject(state.getString("descriptor-" + selected, "{}"));
             File library = library(selected);
             verify(library, descriptor);
-            Log.i("TernRuntime", "Patch " + selected + " probe: " + TernProbe.run(library.getAbsolutePath()));
+            // On a physical Android 11 ARM device, Flutter silently ignored a patch it loaded first
+            // itself, but used it when the app had already loaded it. Keep it resident for the engine.
+            System.load(library.getAbsolutePath());
             commit(state.edit().putInt("booting", selected));
             running = selected;
             return library.getAbsolutePath();
-        } catch (Exception error) {
+        } catch (Exception | UnsatisfiedLinkError error) {
             Log.e("TernRuntime", "Rejecting stored patch " + selected, error);
             commit(state.edit().putBoolean("bad-" + selected, true).putInt("next", 0).putInt("booting", 0));
             running = 0;
@@ -95,7 +97,7 @@ public final class TernNativeRuntime {
 
     /** Dart calls this only after the first frame has rendered. */
     public synchronized void markHealthy() {
-        String fallback = running > 0 ? fallbackReason(running) : null;
+        String fallback = running > 0 ? fallbackReason() : null;
         if (fallback != null) {
             // Flutter silently uses the APK's libapp.so when it cannot use the patch, so the
             // first frame alone does not prove the patch is running.
@@ -114,23 +116,73 @@ public final class TernNativeRuntime {
         if(failed>0) { event("__patch_install_failure__",failed,"Patch did not confirm its first frame; reverted on next launch"); commit(state.edit().putInt("failed",0)); }
     }
 
-    /** Null when the patch library is mapped into this process; otherwise why Flutter fell back. */
-    private String fallbackReason(int number) {
-        File library = library(number);
-        String name = "/" + library.getParentFile().getName() + "/" + library.getName();
-        try (BufferedReader maps = new BufferedReader(new FileReader("/proc/self/maps"))) {
-            for (String line; (line = maps.readLine()) != null;) if (line.contains(name)) return null;
-        } catch (IOException error) {
+    static String maps = "/proc/self/maps";
+
+    /** Null unless Flutter mapped the APK's own libapp.so, which it loads only when it cannot use the patch. */
+    private String fallbackReason() {
+        String name;
+        try { name = "lib/" + abi() + "/libapp.so"; } catch (IOException error) { return null; }
+        android.content.pm.ApplicationInfo info = context.getApplicationInfo();
+        String extracted = canonical(info.nativeLibraryDir + "/libapp.so");
+        java.util.Map<String, long[]> stored = new java.util.HashMap<>();
+        java.util.List<String> apks = new java.util.ArrayList<>(java.util.Collections.singletonList(info.sourceDir));
+        if (info.splitSourceDirs != null) apks.addAll(java.util.Arrays.asList(info.splitSourceDirs));
+        for (String apk : apks) {
+            long[] range = storedEntry(apk, name);
+            if (range != null) stored.put(canonical(apk), range);
+        }
+        try (BufferedReader reader = new BufferedReader(new FileReader(maps))) {
+            for (String line; (line = reader.readLine()) != null;) {
+                String[] field = line.trim().split("\\s+", 6);
+                if (field.length < 6) continue;
+                if (field[5].equals(extracted)) return "Flutter loaded " + extracted;
+                long[] range = stored.get(field[5]);
+                long offset = range == null ? -1 : Long.parseLong(field[2], 16);
+                if (range != null && offset >= range[0] && offset < range[1]) return "Flutter loaded " + name + " from " + new File(field[5]).getName();
+            }
+        } catch (IOException | RuntimeException error) {
             Log.w("TernRuntime", "Cannot confirm which Dart library is running", error);
-            return null;
         }
-        // Flutter unloaded the patch. Loading it here only reveals Android's reason.
-        try {
-            System.load(library.getAbsolutePath());
-            return "Android can load " + library.getName() + ", but Flutter did not use its Dart snapshot";
-        } catch (UnsatisfiedLinkError error) {
-            return String.valueOf(error.getMessage());
+        return null;
+    }
+
+    private static String canonical(String path) {
+        try { return new File(path).getCanonicalPath(); } catch (IOException error) { return path; }
+    }
+
+    /** File offsets [start, end) of an uncompressed ZIP entry, or null. */
+    static long[] storedEntry(String zip, String name) {
+        try (RandomAccessFile file = new RandomAccessFile(zip, "r")) {
+            int tail = (int) Math.min(file.length(), 65557);
+            byte[] end = new byte[tail];
+            file.seek(file.length() - tail); file.readFully(end);
+            java.nio.ByteBuffer e = java.nio.ByteBuffer.wrap(end).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            int eocd = -1;
+            for (int p = tail - 22; p >= 0 && eocd < 0; p--) if (e.getInt(p) == 0x06054b50) eocd = p;
+            if (eocd < 0) return null;
+            int count = e.getShort(eocd + 10) & 0xffff;
+            byte[] directory = new byte[e.getInt(eocd + 12)];
+            file.seek(e.getInt(eocd + 16) & 0xffffffffL); file.readFully(directory);
+            java.nio.ByteBuffer d = java.nio.ByteBuffer.wrap(directory).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            byte[] wanted = name.getBytes(StandardCharsets.UTF_8);
+            for (int p = 0, i = 0; i < count && p + 46 <= directory.length; i++) {
+                if (d.getInt(p) != 0x02014b50) return null;
+                int length = d.getShort(p + 28) & 0xffff;
+                if ((d.getShort(p + 10) & 0xffff) == 0 && java.util.Arrays.equals(java.util.Arrays.copyOfRange(directory, p + 46, p + 46 + length), wanted)) {
+                    long local = d.getInt(p + 42) & 0xffffffffL, size = d.getInt(p + 20) & 0xffffffffL;
+                    byte[] header = new byte[30];
+                    file.seek(local); file.readFully(header);
+                    java.nio.ByteBuffer h = java.nio.ByteBuffer.wrap(header).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+                    if (h.getInt(0) != 0x04034b50) return null;
+                    long start = local + 30 + (h.getShort(26) & 0xffff) + (h.getShort(28) & 0xffff);
+                    return new long[] { start, start + size };
+                }
+                p += 46 + length + (d.getShort(p + 30) & 0xffff) + (d.getShort(p + 32) & 0xffff);
+            }
+        } catch (IOException | RuntimeException error) {
+            Log.w("TernRuntime", "Cannot read " + zip, error);
         }
+        return null;
     }
 
     public synchronized void automaticUpdate() {
@@ -253,6 +305,14 @@ public final class TernNativeRuntime {
         signature.initVerify(KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(Base64.decode(config.getString("public_key"), Base64.DEFAULT))));
         signature.update(message.getBytes(StandardCharsets.UTF_8));
         if (!signature.verify(Base64.decode(patch.getString("hash_signature"), Base64.DEFAULT))) throw new IOException("Patch signature rejected");
+    }
+
+    private String abi() throws IOException {
+        switch (arch()) {
+            case "aarch64": return "arm64-v8a";
+            case "arm": return "armeabi-v7a";
+            default: return "x86_64";
+        }
     }
 
     private String arch() throws IOException {

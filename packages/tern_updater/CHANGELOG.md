@@ -1,3 +1,10 @@
+## 0.3.2
+
+- Load the selected patch library from the app before Flutter starts and keep it loaded. On a physical Android 11 ARM device, Flutter silently ran the APK's original code when it was the first to load a patch, and used the patch when the app had loaded it first. A patch Android cannot load is now rejected before Flutter starts, with Android's error in the log.
+- Detect a fallback by checking whether Flutter mapped the APK's own `libapp.so`, which it loads only when it cannot use the patch.
+- Remove the temporary native probe; the plugin has no native build again.
+- Requires a new baseline APK.
+
 ## 0.3.1
 
 - Detect when Flutter silently starts the APK's original Dart code instead of a selected patch. The patch is then marked bad, the app reports its real patch as the original release, a `__patch_install_failure__` event with Android's load error is sent, and `TernRuntime` logs the reason. Previously the patch was reported as installed.
