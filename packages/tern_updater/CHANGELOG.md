@@ -1,3 +1,12 @@
+## 0.3.0
+
+- Add `available` and `downloading` update phases, with download progress (`receivedBytes`, `totalBytes`, `downloadProgress`) and the found or downloading patch number.
+- Report downloads the native runtime starts after launch; previously these were invisible until the patch was staged.
+- Add `autoDownload: false` and `downloadUpdate()` so users can choose when to download.
+- Add `TernUpdateBanner(showProgress: true)` to show Update available and Downloading update in addition to Update ready.
+- Read patch and download state without waiting behind a running download.
+- Requires a new baseline APK. `TernUpdatePhase` has a new `available` value; update exhaustive switches.
+
 ## 0.2.0
 
 - Replace the Shorebird Dart dependency with Tern's original Android native runtime.

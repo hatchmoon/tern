@@ -71,6 +71,7 @@ class _ExampleHomeState extends State<ExampleHome> {
       body: Column(
         children: [
           TernUpdateBanner(
+            showProgress: true,
             beforeRestart: () async {
               if (notes.text.isEmpty) return true;
               ScaffoldMessenger.of(context).showSnackBar(

@@ -88,6 +88,31 @@ TernUpdateBanner(
 )
 ```
 
+## Show available and downloading updates
+
+By default the banner appears only when an update is downloaded and ready. Pass `showProgress: true` to also show the earlier states:
+
+```dart
+const TernUpdateBanner(showProgress: true)
+```
+
+- **Downloading update** with a progress bar and percentage while a patch downloads. This includes the download the native runtime starts on its own after launch. The percentage is omitted when the server does not report a size.
+- **Update available** with **Later** and **Download** when a patch has been found but not downloaded. This only happens when automatic download is off (below).
+- **Update ready** as before, once the patch is staged.
+
+To let users choose when to download, turn off automatic download in both places, then build a new baseline:
+
+```dart
+final updates = TernUpdateController(autoDownload: false);
+```
+
+```yaml
+# tern.yaml: stops the native runtime downloading after launch.
+auto_update: false
+```
+
+With `autoDownload: false` alone, the controller only reports the patch as available, but the native runtime still downloads it after the next launch. `tern.yaml` is packaged into the APK, so changing `auto_update` requires a new baseline. Call `updates.downloadUpdate()` from your own UI to download an available patch.
+
 ## Custom UI and manual checks
 
 ```dart
@@ -97,11 +122,19 @@ final state = updates.state;
 // On an explicit Check for updates button:
 await updates.checkForUpdates();
 
-// state.phase: checking, downloading, restartRequired, upToDate, unavailable,
-//              failed, restarting (or idle before the first check).
+// state.phase: checking, available, downloading, restartRequired, upToDate,
+//              unavailable, failed, restarting (or idle before the first check).
 // state.currentPatch / state.nextPatch: 0 means the original store release.
+// state.availablePatch: found but not downloaded (0 for none or unknown).
+// state.downloadingPatch, state.receivedBytes, state.totalBytes and
+// state.downloadProgress (0–1, null when the size is unknown) while downloading.
 // state.canRestart, state.dismissed, state.error are available for custom UI.
+
+// With autoDownload: false, after the user chooses to download:
+await updates.downloadUpdate();
 ```
+
+Download progress arrives from the native runtime about four times per second. `restartRequired` can be true while a newer patch downloads; Restart now stays disabled until that download finishes.
 
 Checks are coalesced so repeated taps do not start parallel downloads. A readiness banner waits for a committed next-patch value; a native download still in progress does not trigger a premature restart. Network errors are available in state and never block app use. Already-staged updates remain available offline. Direct calls to `updates.restart()` require your own user confirmation and saving work first.
 

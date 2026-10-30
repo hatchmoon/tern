@@ -1,6 +1,6 @@
 name: tern_updater
 description: Tern update status, a ready-to-restart banner, and an Android cold restart for Flutter apps.
-version: 0.2.0
+version: 0.3.0
 publish_to: none
 environment:
   sdk: '>=3.8.0 <4.0.0'
