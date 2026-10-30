@@ -18,7 +18,7 @@ tern init --name "My app" --configure-runtime --server https://tern.hatchmoon.cv
 
 CLI management authentication still uses `TERN_TOKEN` or `--token-file`. No administrator credential is embedded in the app.
 
-Initialization adds the local `tern_updater` package, Internet permission, the early `TernApplication` loader, and runtime assets. The Android minimum is API 26. The CLI supports standard Kotlin Gradle scaffolds; inspect an existing Groovy Gradle project's `minSdkVersion` and set it to at least 26 yourself. Custom Android Application classes are never overwritten: call `TernApplication.install(this)` before Flutter initialization and add the package and assets manually.
+Initialization adds the `tern_updater` package from its public repository ([hatchmoon/tern_updater](https://github.com/hatchmoon/tern_updater), pinned to the tag matching your CLI), Internet permission, the early `TernApplication` loader, and runtime assets. The Android minimum is API 26. The CLI supports standard Kotlin Gradle scaffolds; inspect an existing Groovy Gradle project's `minSdkVersion` and set it to at least 26 yourself. Custom Android Application classes are never overwritten: call `TernApplication.install(this)` before Flutter initialization and add the package and assets manually. To build against a local checkout of the package while developing it, set `TERN_UPDATER_PATH` to its folder before running `tern init` or `tern integrate`.
 
 Wrap the app root with `TernUpdateScope` and put `TernUpdateBanner` on an appropriate screen. See [the Flutter package guide](../packages/tern_updater/README.md) for the full integration.
 
@@ -53,7 +53,7 @@ For now devices download the complete signed `libapp.so`. The server retains its
 
 An already installed engine cannot be replaced by a Dart patch. Keep `tern.yaml` without `runtime: tern-native-v1` and use `tern setup --runtime legacy` when building patches for those old releases. Its pin is retained separately in `runtime/legacy-toolchain.json`. The server isolates offers for the two runtimes.
 
-To migrate, create a new release version/build, upgrade any existing `tern_updater` dependency to 0.2.0, then run `tern integrate` from the project folder. This preserves its app ID and server URL, selects `runtime: tern-native-v1`, and wires in the early loader and assets. Add the scope/banner to the app and run `tern release` to build/distribute a new baseline APK. The old 0.1.0 package tag remains available for older installations. Do not change the original release's runtime metadata or overwrite its binaries. Winstar's current production installation is not automatically migrated by this work.
+To migrate, create a new release version/build, upgrade any existing `tern_updater` dependency to 0.2.0 or later, then run `tern integrate` from the project folder. This preserves its app ID and server URL, selects `runtime: tern-native-v1`, and wires in the early loader and assets. Add the scope/banner to the app and run `tern release` to build/distribute a new baseline APK. The old 0.1.0 package tag remains available for older installations. Do not change the original release's runtime metadata or overwrite its binaries. Winstar's current production installation is not automatically migrated by this work.
 
 ## Verification
 

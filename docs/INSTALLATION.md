@@ -49,7 +49,7 @@ tern patch --notes "Fix checkout"
 tern deploy --patch PATCH_ID --channel staging --rollout 100
 ```
 
-Restore local Flutter package dependencies if your project's `pubspec.yaml` points to an absolute path from another machine. Prefer the versioned Git dependency documented in the Flutter package README, or point the dependency at the package included with the installed CLI. Preserve the original package/runtime version for existing releases.
+Restore local Flutter package dependencies if your project's `pubspec.yaml` points to an absolute path from another machine. Prefer the versioned Git dependency on the public [hatchmoon/tern_updater](https://github.com/hatchmoon/tern_updater) repository, which needs no GitHub sign-in. Preserve the original package/runtime version for existing releases.
 
 For a new application, use `tern init --name "My app" --configure-runtime`, add the update scope/banner, and build a new baseline with `tern release`. See [the independent runtime guide](INDEPENDENT_RUNTIME.md).
 

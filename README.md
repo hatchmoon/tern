@@ -139,7 +139,14 @@ Back up the whole data directory consistently (stop the process first, or use SQ
 
 ## Layout
 
-Optional Flutter integration: [Tern Updater](packages/tern_updater/README.md) adds a reusable update-ready banner, unsaved-work guard, and Android cold restart. It requires a new baseline APK when first installed. See the package's Android example and `scripts/flutter-sdk-e2e.mjs` for validation.
+Optional Flutter integration: [Tern Updater](packages/tern_updater/README.md), published publicly as [hatchmoon/tern_updater](https://github.com/hatchmoon/tern_updater), adds a reusable update-ready banner, unsaved-work guard, and Android cold restart. It requires a new baseline APK when first installed. See the package's Android example and `scripts/flutter-sdk-e2e.mjs` for validation.
+
+To publish a package release, bump `version` in `packages/tern_updater/pubspec.yaml`, merge it, then copy the package into a clone of the public repository and tag it with the same version. `tern init` and `tern integrate` pin new apps to `v` plus that version, so publish the tag before distributing a CLI that bundles it:
+
+```sh
+git archive HEAD:packages/tern_updater | tar -x -C ../tern_updater
+cd ../tern_updater && git add -A && git commit -m "tern_updater 0.3.0" && git tag v0.3.0 && git push origin main v0.3.0
+```
 
 ```text
 cli/tern.mjs          Project build/upload CLI and binary verification simulator

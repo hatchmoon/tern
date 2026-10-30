@@ -8,6 +8,5 @@ Initialize this app with `tern init --configure-runtime --channel staging
 `tern release`. Install that original APK once; compatible Dart changes can
 then be patched. The manifest allows cleartext for local emulator testing.
 
-Run `node scripts/flutter-sdk-e2e.mjs` from the Tern root for the isolated native
-verification. It copies this example and uses its own local server and data.
-The verifier exercises the banner and its restart confirmation dialog.
+The banner shows available, downloading and ready updates (`showProgress: true`)
+and its restart confirmation dialog.

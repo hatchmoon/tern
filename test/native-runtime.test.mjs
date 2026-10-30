@@ -9,7 +9,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createApp} from '../server/app.mjs';
 import {sha256} from '../lib/patch.mjs';
-import {patchSignatureMessage,verifyNativePatch,integrateNativeProject,nativeToolchain} from '../lib/native-runtime.mjs';
+import {patchSignatureMessage,verifyNativePatch,integrateNativeProject,nativeToolchain,updaterDependency} from '../lib/native-runtime.mjs';
 
 const pair=generateKeyPairSync('rsa',{modulusLength:2048});
 const publicKey=pair.publicKey.export({type:'spki',format:'der'}).toString('base64');
@@ -78,6 +78,10 @@ test('native integration is idempotent and refuses to overwrite a custom Applica
   integrateNativeProject(project);const before=readFileSync(path,'utf8'),pubspec=readFileSync(join(project,'pubspec.yaml'),'utf8');
   integrateNativeProject(project);assert.equal(readFileSync(path,'utf8'),before);assert.equal(readFileSync(join(project,'pubspec.yaml'),'utf8'),pubspec);
   assert.match(before,/cv.hatchmoon.tern.updater.TernApplication/);assert.match(pubspec,/- tern-runtime.json/);assert.match(pubspec,/- tern.yaml/);
+  assert.ok(pubspec.includes('dependencies:\n'+updaterDependency()+'\n'));
+  const version=readFileSync(new URL('../packages/tern_updater/pubspec.yaml',import.meta.url),'utf8').match(/^version:\s*(\S+)/m)[1];
+  assert.equal(updaterDependency(''),'  tern_updater:\n    git:\n      url: https://github.com/hatchmoon/tern_updater.git\n      ref: v'+version);
+  assert.match(updaterDependency(join(tmpdir(),'tern_updater')),/^  tern_updater:\n    path: ".*tern_updater"$/);
   writeFileSync(path,'<manifest><application android:name="my.CustomApplication"></application></manifest>');
   assert.throws(()=>integrateNativeProject(project),/Custom Android Application/);assert.match(readFileSync(path,'utf8'),/my.CustomApplication/);
 });

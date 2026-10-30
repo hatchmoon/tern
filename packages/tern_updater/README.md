@@ -1,31 +1,26 @@
 # Tern Updater for Flutter
 
-Tern's independent Android update runtime, reusable update status, update-available, downloading and **Update ready** banners, and a confirmed **Restart now** action. Since version 0.2.0 it uses official Flutter and has no Shorebird package dependency. It requires a new baseline APK and is not published to pub.dev. Read the [runtime setup and migration guide](../../docs/INDEPENDENT_RUNTIME.md) before upgrading an existing app.
+The Flutter package for [Tern](https://tern.hatchmoon.cv), a self-hosted code-push service for Flutter apps. It contains Tern's Android update runtime, update status for your own UI, update-available, downloading and **Update ready** banners, and a confirmed **Restart now** action. It uses official Flutter and needs no Shorebird package. Updates need a Tern server and apps built with the Tern CLI. The package is not published to pub.dev.
 
 ## Install once per application
 
-From the private GitHub repository, use the version tag and package subdirectory:
+Add the package from this repository, pinned to a version tag:
 
 ```yaml
 dependencies:
   tern_updater:
     git:
-      url: https://github.com/hatchmoon/tern.git
-      ref: tern-updater-v0.3.0
-      path: packages/tern_updater
+      url: https://github.com/hatchmoon/tern_updater.git
+      ref: v0.3.0
 ```
 
-Your development/build machine must have GitHub read access to that private repository. Authenticate Git outside the Flutter app; never put a GitHub token in pubspec.yaml. Keep the version tag pinned so builds use the same native plugin source. Obtain newer SDK versions by updating the tag when creating a new baseline release. Releases already built with `tern-updater-v0.2.0` keep that tag for their patches; 0.3.0 changes native code and needs a new baseline.
+`tern init --configure-runtime` and `tern integrate` add this dependency for you, together with the early Android loader, Internet permission and runtime assets. Adding the Dart package alone is not enough.
 
-From a Flutter application on this development machine:
+Keep the version tag pinned: releases and their patches must be built with the same native plugin source. Move to a newer tag only when you build a new baseline release. Apps released with 0.2.0 keep using 0.2.0 for their patches; 0.3.0 changes native code and needs a new baseline. Releases made before this repository existed used `ref: tern-updater-v0.2.0` with `path: packages/tern_updater` from Tern's own repository; those keep working unchanged.
 
-```powershell
-flutter pub add tern_updater --path D:/HatchMoon/tern/packages/tern_updater
-```
+Use the pinned official Flutter 3.44.8 SDK, Java 17+, Android API 26+ and a build setup compatible with AGP 8.11.1 and compile SDK 36. Tern releases and patches must continue using the same pin. Normal Flutter debug builds expose `unavailable` update state and show no update banner.
 
-Use the pinned official Flutter 3.44.8 SDK, Java 17+, Android API 26+ and a build setup compatible with AGP 8.11.1 and compile SDK 36. `tern init --configure-runtime` connects the early Android loader and assets for a new app. Merely adding the Dart package is insufficient. Tern releases and patches must continue using the same pin. Normal Flutter debug builds expose `unavailable` update state and show no update banner.
-
-Alternatively, copy this package or extract the supplied ZIP, then change the dependency path. Do not add administrator tokens, signing private keys or passwords to the app. The CLI builds public runtime configuration from `tern.yaml` and embeds the signing public key in `tern-runtime.json`.
+Never put administrator tokens, signing private keys or passwords in the app. The CLI builds public runtime configuration from `tern.yaml` and embeds the signing public key in `tern-runtime.json`. Patches are accepted only with a valid signature and SHA-256 hash.
 
 ## Wrap your application
 
@@ -54,7 +49,7 @@ TernUpdateScope(controller: updates, child: const MyApp())
 // Dispose updates when its owning app-root State is disposed.
 ```
 
-The default channel is stable, matching existing Winstar releases. If you select another channel, make the native automatic updater's configured channel match, or disable native automatic checks using `auto_update: false` before building a new baseline so this controller manages all checks. Do not change packaged YAML inside an existing release merely to change channels.
+The default channel is stable. If you select another channel, make the native automatic updater's configured channel match, or disable native automatic checks using `auto_update: false` before building a new baseline so this controller manages all checks. Do not change packaged YAML inside an existing release merely to change channels.
 
 ## Add the banner to your home screen
 
@@ -142,7 +137,7 @@ Checks are coalesced so repeated taps do not start parallel downloads. A readine
 
 Adding this plugin changes Android native code and the manifest. Integrate it into a **new release version/build**, build with `tern release`, and distribute that original APK once. Do not upload the integration as a patch for an existing baseline: Tern's native compatibility guard correctly rejects it.
 
-For Winstar, keep the installed `2.0.3+1` baseline and its patch history intact. After wiring the scope in `lib/main.dart` and the banner in `lib/homepage.dart`, use a new build such as `2.0.3+2`. The native restart helper will be included in that new APK. Later compatible Dart-only updates use `tern patch` and the same restart flow.
+For an app already in use, keep its installed baseline and patch history intact. After wiring the scope into your app root and the banner into your home screen, bump the build number (for example `2.0.3+1` to `2.0.3+2`). The native restart helper is included in that new APK. Later compatible Dart-only updates use `tern patch` and the same restart flow.
 
 No server migration is needed. Existing apps that have not integrated this package keep their current updater behavior.
 
@@ -154,6 +149,14 @@ From this package: `flutter analyze` and `flutter test`.
 
 Version 0.1.0 passed analysis and 13 controller/widget tests. Its native Android x86_64 emulator check also passed: original process → banner and confirmation → downloaded patch in a new process → banner and confirmation → original code after rollback. The APK was installed once and no external Force stop was used to apply either change. This validates the reusable package's Android restart path; physical-device/OEM validation is still needed when integrating a new baseline into your app.
 
-From the Tern repository, with an Android x86_64 emulator running: `node scripts/flutter-sdk-e2e.mjs`. The verifier creates a dedicated temporary app and local database, installs its original APK once, and uses the real package to download a Dart patch, tap Restart now and confirm, then repeat after rollback. It never uses the production server or installs Winstar. Evidence is saved in `test-results/flutter-sdk/`.
+Tern's own repository also runs this example on an Android x86_64 emulator against a temporary local server: it installs the original APK once, downloads a Dart patch, taps Restart now and confirms, then repeats after rollback.
 
 Android OEM behavior and application-specific foreground services should also be tested on your target devices. The helper uses a non-exported activity in a `:tern_restart` process without alarm or extra Android permissions. Apps with a custom native `Application` class should avoid starting background work/Flutter engines in that helper process.
+
+## Development
+
+This repository is published from Tern's main repository, where the package is developed together with the CLI and server. Report issues here.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

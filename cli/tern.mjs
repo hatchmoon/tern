@@ -150,7 +150,7 @@ export async function run(args = process.argv.slice(2)) {
     integrateNativeProject(project);ensureRuntimeAsset(project);
     writeFileSync(path,/^runtime:/m.test(source)?source.replace(/^runtime:.*$/m,'runtime: tern-native-v1'):'runtime: tern-native-v1\n'+source);
     if(!existsSync(join(project,'tern-runtime.json')))writeFileSync(join(project,'tern-runtime.json'),'{}\n',{flag:'wx'});
-    return print({runtime:'tern-native-v1',project,new_baseline_required:true,next:'Upgrade tern_updater to 0.2.0, add TernUpdateScope/banner, then run tern release for a new app version/build.'});
+    return print({runtime:'tern-native-v1',project,new_baseline_required:true,next:'Use tern_updater 0.2.0 or later (added to pubspec.yaml if missing), add TernUpdateScope/banner, then run tern release for a new app version/build.'});
   }
   if (command === 'doctor') {
     const result=await diagnose({server,project,yaml,request,serverOnly:o['server-only']});print(result);
