@@ -1,6 +1,6 @@
 # Tern Updater for Flutter
 
-Tern's independent Android update runtime, reusable update status, an **Update ready** banner, and a confirmed **Restart now** action. Version 0.2.0 uses official Flutter and has no Shorebird package dependency. It requires a new baseline APK and is not published to pub.dev. Read the [runtime setup and migration guide](../../docs/INDEPENDENT_RUNTIME.md) before upgrading an existing app.
+Tern's independent Android update runtime, reusable update status, update-available, downloading and **Update ready** banners, and a confirmed **Restart now** action. Since version 0.2.0 it uses official Flutter and has no Shorebird package dependency. It requires a new baseline APK and is not published to pub.dev. Read the [runtime setup and migration guide](../../docs/INDEPENDENT_RUNTIME.md) before upgrading an existing app.
 
 ## Install once per application
 
@@ -11,11 +11,11 @@ dependencies:
   tern_updater:
     git:
       url: https://github.com/hatchmoon/tern.git
-      ref: tern-updater-v0.2.0
+      ref: tern-updater-v0.3.0
       path: packages/tern_updater
 ```
 
-Your development/build machine must have GitHub read access to that private repository. Authenticate Git outside the Flutter app; never put a GitHub token in pubspec.yaml. Keep the version tag pinned so builds use the same native plugin source. Obtain newer SDK versions by updating the tag when creating a new baseline release.
+Your development/build machine must have GitHub read access to that private repository. Authenticate Git outside the Flutter app; never put a GitHub token in pubspec.yaml. Keep the version tag pinned so builds use the same native plugin source. Obtain newer SDK versions by updating the tag when creating a new baseline release. Releases already built with `tern-updater-v0.2.0` keep that tag for their patches; 0.3.0 changes native code and needs a new baseline.
 
 From a Flutter application on this development machine:
 
