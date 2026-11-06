@@ -100,6 +100,10 @@ This installs and clears only `dev.tern.tern_example`, builds a changed Dart UI,
 
 Advanced raw artifact uploads and binary simulation remain available. Run `tern --help` for `--artifact arch=path`, `--engine`, `check`, and `simulate`. Runtime-managed releases also require a matching build compatibility manifest when uploading a patch; the project build command supplies it automatically.
 
+## Store policies
+
+Read [docs/STORE_POLICY.md](docs/STORE_POLICY.md) before using Tern in a Google Play app: what patches may change, Google Play's rule on downloaded code, and Tern's safeguards.
+
 ## Coding agents
 
 [`docs/agents/install-tern/SKILL.md`](docs/agents/install-tern/SKILL.md) tells a coding agent how to install Tern in a Flutter project. For Claude Code, copy the `install-tern` folder into the Flutter project's `.claude/skills/`. For Codex, copy the file into the project and reference it from `AGENTS.md`, or paste its content there.

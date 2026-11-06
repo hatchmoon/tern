@@ -133,6 +133,10 @@ Download progress arrives from the native runtime about four times per second. `
 
 Checks are coalesced so repeated taps do not start parallel downloads. A readiness banner waits for a committed next-patch value; a native download still in progress does not trigger a premature restart. Network errors are available in state and never block app use. Already-staged updates remain available offline. Direct calls to `updates.restart()` require your own user confirmation and saving work first.
 
+## Store policies
+
+Patches may only fix and improve the reviewed app: don't change its purpose, avoid store review, or break store policies. `tern patch` rejects native, resource, asset and engine changes; those need a store release. Google Play restricts apps that download executable code from outside Google Play, and whether Tern's compiled Dart patches qualify for its virtual-machine exemption is Google's decision. Test a Tern-enabled build on a Play testing track before relying on it there. Apps distributed outside Google Play are not subject to Play's policies. See Tern's store policy guide (`docs/STORE_POLICY.md` in the Tern repository) for details and the safeguards Tern provides.
+
 ## One new baseline APK is required
 
 Adding this plugin changes Android native code and the manifest. Integrate it into a **new release version/build**, build with `tern release`, and distribute that original APK once. Do not upload the integration as a patch for an existing baseline: Tern's native compatibility guard correctly rejects it.
