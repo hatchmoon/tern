@@ -3,6 +3,7 @@
 - Load the selected patch library from the app before Flutter starts and keep it loaded. On a physical Android 11 ARM device, Flutter silently ran the APK's original code when it was the first to load a patch, and used the patch when the app had loaded it first. A patch Android cannot load is now rejected before Flutter starts, with Android's error in the log.
 - Detect a fallback by checking whether Flutter mapped the APK's own `libapp.so`, which it loads only when it cannot use the patch.
 - Remove the temporary native probe; the plugin has no native build again.
+- Roll back a patch when the app stops while in the foreground in two consecutive sessions, which catches crashes after startup. The previous working patch or the original release runs on the next launch, and the failure is reported to the server. Leaving the foreground and Restart now end a session cleanly.
 - Requires a new baseline APK.
 
 ## 0.3.1

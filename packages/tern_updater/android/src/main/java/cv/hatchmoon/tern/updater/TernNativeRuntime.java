@@ -34,6 +34,9 @@ public final class TernNativeRuntime {
     private volatile int availableNumber, downloadingNumber;
     private volatile long receivedBytes, totalBytes = -1;
     private long statusSentAt;
+    /** Consecutive sessions that ended while the app was in the foreground before a patch is rolled back. */
+    static final int CRASH_LIMIT = 2;
+    private int foregroundActivities;
 
     public static synchronized TernNativeRuntime get(Context context) {
         if (instance == null) instance = new TernNativeRuntime(context.getApplicationContext());
@@ -67,11 +70,12 @@ public final class TernNativeRuntime {
     /** Called once by the loader, before the Dart VM exists. Never fetches over the network. */
     public synchronized String selectForLaunch() {
         if (!available()) return null;
+        countCrash();
         int unfinished = state.getInt("booting", 0);
         if (unfinished > 0) {
             int good = state.getInt("good", 0);
             if (good == unfinished) good = 0;
-            commit(state.edit().putBoolean("bad-" + unfinished, true).putInt("next", good).putInt("booting", 0).putInt("failed", unfinished));
+            commit(state.edit().putBoolean("bad-" + unfinished, true).putInt("next", good).putInt("booting", 0).putInt("failed", unfinished).putString("failed-reason", null));
             Log.w("TernRuntime", "Previous patch did not confirm its first frame; reverting patch " + unfinished);
         }
         int selected = next();
@@ -109,11 +113,44 @@ public final class TernNativeRuntime {
             event("__patch_install_failure__", patch, "Flutter ran the original code instead of the patch: " + fallback);
         }
         if (running > 0 && state.getInt("booting", 0) == running) {
-            commit(state.edit().putInt("booting", 0).putInt("good", running));
+            int previous = state.getInt("good", 0);
+            commit(state.edit().putInt("booting", 0).putInt("good", running).putInt("previous-" + running, previous == running ? 0 : previous));
             event("__patch_install__", running, "Tern native runtime rendered its first frame");
         }
         int failed=state.getInt("failed",0);
-        if(failed>0) { event("__patch_install_failure__",failed,"Patch did not confirm its first frame; reverted on next launch"); commit(state.edit().putInt("failed",0)); }
+        if(failed>0) { event("__patch_install_failure__",failed,state.getString("failed-reason","Patch did not confirm its first frame; reverted on next launch")); commit(state.edit().putInt("failed",0).putString("failed-reason",null)); }
+    }
+
+    /** A session still open at launch means the previous process died in the foreground. */
+    private void countCrash() {
+        int patch = state.getInt("session", 0);
+        if (patch <= 0) return;
+        int crashes = state.getInt("crashes-" + patch, 0) + 1;
+        SharedPreferences.Editor edit = state.edit().putInt("session", 0).putInt("crashes-" + patch, crashes);
+        if (crashes >= CRASH_LIMIT) {
+            int previous = state.getInt("previous-" + patch, 0);
+            String reason = "Patch " + patch + " stopped while in use in " + crashes + " consecutive sessions; rolled back to " + (previous > 0 ? "patch " + previous : "the original release");
+            Log.w("TernRuntime", reason);
+            edit.putBoolean("bad-" + patch, true).putInt("failed", patch).putString("failed-reason", reason);
+            if (next() == patch) edit.putInt("next", previous);
+            if (state.getInt("good", 0) == patch) edit.putInt("good", previous);
+        }
+        commit(edit);
+    }
+
+    /** Main thread only. Not synchronized: a download may hold the runtime lock for a long time. */
+    public void foreground(boolean started) {
+        int patch = running;
+        if (patch <= 0) return;
+        foregroundActivities = Math.max(0, foregroundActivities + (started ? 1 : -1));
+        if (started && foregroundActivities == 1) commit(state.edit().putInt("session", patch));
+        else if (!started && foregroundActivities == 0) endSession();
+    }
+
+    /** Leaving the foreground, or a confirmed restart, ends the session cleanly. */
+    public void endSession() {
+        int patch = running;
+        if (patch > 0) commit(state.edit().putInt("session", 0).putInt("crashes-" + patch, 0));
     }
 
     static String maps = "/proc/self/maps";

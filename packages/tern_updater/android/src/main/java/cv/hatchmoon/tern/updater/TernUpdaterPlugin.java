@@ -98,6 +98,7 @@ public final class TernUpdaterPlugin implements FlutterPlugin, MethodChannel.Met
         }
         try {
             restarting = true;
+            TernNativeRuntime.get(context).endSession();
             Intent helper = new Intent(current, TernRestartActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 .putExtra(TernRestartActivity.ORIGINAL_PID, Process.myPid());

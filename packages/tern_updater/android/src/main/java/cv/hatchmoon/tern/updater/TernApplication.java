@@ -1,7 +1,9 @@
 package cv.hatchmoon.tern.updater;
 
+import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.os.Bundle;
 import android.util.Log;
 import io.flutter.FlutterInjector;
 import io.flutter.embedding.engine.FlutterJNI;
@@ -22,6 +24,18 @@ public class TernApplication extends Application {
         if (android.os.Build.VERSION.SDK_INT >= 28 && android.app.Application.getProcessName().endsWith(":tern_restart")) return;
         TernNativeRuntime runtime = TernNativeRuntime.get(context);
         if (!runtime.available()) return;
+        if (context instanceof Application) {
+            // Tracks foreground sessions so a patch that keeps crashing in use is rolled back.
+            ((Application) context).registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+                @Override public void onActivityStarted(Activity activity) { runtime.foreground(true); }
+                @Override public void onActivityStopped(Activity activity) { runtime.foreground(false); }
+                @Override public void onActivityCreated(Activity activity, Bundle saved) {}
+                @Override public void onActivityResumed(Activity activity) {}
+                @Override public void onActivityPaused(Activity activity) {}
+                @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
+                @Override public void onActivityDestroyed(Activity activity) {}
+            });
+        }
         FlutterInjector.setInstance(new FlutterInjector.Builder().setFlutterLoader(new FlutterLoader(new FlutterJNI(), Executors.newCachedThreadPool()) {
             @Override public void ensureInitializationComplete(Context context, String[] args) {
                 if (initialized()) return;
